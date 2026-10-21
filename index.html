@@ -833,7 +833,7 @@ nav.tabs button[aria-current="page"]{color:var(--accent);background:var(--accent
 
 <script src="xlsx.full.min.js"></script>
 <script src="leaflet.js"></script>
-<script>window.__SODO__=true;</script>
+<script>window.__SODO__=true;window.__SODO_VER__='20261021-1648';</script>
 <script>
 (function(){
 'use strict';
@@ -1616,6 +1616,7 @@ function viewSum(){
       (ex?'<p class="note">Lần xuất gần nhất: '+new Date(ex.at).toLocaleString('vi-VN')+' ('+ex.plots+' ô)</p>':'')+
       '<div class="row"><button class="btn pri" data-act="sodo-share"'+(np?'':' disabled')+'>Gửi file sổ đo</button><button class="btn" data-act="sodo-save"'+(np?'':' disabled')+'>Lưu file vào máy</button></div>'+
       '<p class="note">Chỉ xóa dữ liệu trên máy sau khi đã nhập thành công vào kho chung.</p><div class="row">'+armBtn('local-clear','Xóa dữ liệu trên máy','local-clear')+'</div>'+
+      '<div class="row between"><span class="note">Phiên bản '+esc(window.__SODO_VER__||'')+'</span><button class="btn sm" data-act="app-update">Tải bản mới nhất</button></div>'+
       '<p class="note">Ứng dụng chạy được khi không có sóng. Mở ít nhất một lần khi có mạng để máy lưu sẵn.</p></section>';
     return h;}
   h+='<section class="panel"><h2>Đồng bộ</h2>';
@@ -1752,6 +1753,10 @@ document.addEventListener('click',function(e){
       if(convVN(S.draft)){S.draft.dirty=true;saveDraft();var la=$('#d_lat'),ln=$('#d_lng'),vx=$('#d_vnX'),vy=$('#d_vnY');if(la)la.value=S.draft.lat;if(ln)ln.value=S.draft.lng;if(vx)vx.value=S.draft.vnX;if(vy)vy.value=S.draft.vnY;toast('Đã đổi: '+S.draft.lat.toFixed(6)+', '+S.draft.lng.toFixed(6));}
       break;
     case 'sync-now':flush();break;
+    case 'app-update':toast('Đang tải bản mới…');
+      Promise.all([window.caches?caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!=='sodo-tiles';}).map(function(k){return caches.delete(k);}));}):0,
+        navigator.serviceWorker?navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister();}));}):0])
+      .catch(function(){}).then(function(){location.replace(location.pathname+'?v='+Date.now()+location.hash);});break;
     case 'imp-add':impAdd();break;
     case 'scan-why':toast(S.sample?'Chế độ xem này chưa gửi được ảnh cho Claude. Mở trang trong ứng dụng Claude hoặc claude.ai và cho phép trang dùng Claude.':'Cần mở trang trong Claude khi đã đăng nhập để quét ảnh.');break;
     case 'scan-phieu':scanPhieu();break;
