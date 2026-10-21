@@ -1,0 +1,26 @@
+{
+ "name": "Sổ đo thực địa",
+ "short_name": "Sổ đo",
+ "lang": "vi",
+ "description": "Đo ô tiêu chuẩn rừng trồng ngoài thực địa: C1.3, Hvn, phẩm chất, tự quét GPS, chạy không cần mạng.",
+ "start_url": "./",
+ "scope": "./",
+ "display": "standalone",
+ "orientation": "portrait",
+ "background_color": "#EDF0EB",
+ "theme_color": "#0A6B58",
+ "icons": [
+  {
+   "src": "icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any maskable"
+  },
+  {
+   "src": "icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any maskable"
+  }
+ ]
+}
