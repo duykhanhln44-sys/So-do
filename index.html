@@ -218,7 +218,7 @@ async function flush(){
 function pendingCount(){var n=Object.keys(S.pending).length;return n+localPhotoRefs().size;}
 function localPhotoRefs(){
   var m=new Map(),pl=coll('plots');
-  Object.keys(pl).forEach(function(id){(pl[id].photos||[]).forEach(function(r){if(typeof r==='string'&&r.indexOf('local:')===0)m.set(r.slice(6),id);});});
+  Object.keys(pl).forEach(function(id){(pl[id].photos||[]).concat(pl[id].phieu||[]).forEach(function(r){if(typeof r==='string'&&r.indexOf('local:')===0)m.set(r.slice(6),id);});});
   return m;
 }
 
@@ -238,9 +238,9 @@ async function flushPhotos(){
     if(!blob)continue;
     var r=await S.assets.upload(blob);
     var p=coll('plots')[pid];
-    if(p){var photos=(p.photos||[]).map(function(x){return x==='local:'+key?r.id:x;});
-      S.pending['plots/'+pid]={op:'set',data:Object.assign({},p,{photos:photos}),seq:++S.seq};savePending();}
-    if(S.draft&&S.draft.photos){S.draft.photos=S.draft.photos.map(function(x){return x==='local:'+key?r.id:x;});saveDraft();}
+    function sw(x){return x==='local:'+key?r.id:x;}
+    if(p){S.pending['plots/'+pid]={op:'set',data:Object.assign({},p,{photos:(p.photos||[]).map(sw),phieu:(p.phieu||[]).map(sw)}),seq:++S.seq};savePending();}
+    if(S.draft){S.draft.photos=(S.draft.photos||[]).map(sw);S.draft.phieu=(S.draft.phieu||[]).map(sw);saveDraft();}
     delete MEM[key];idbDel(key).catch(function(){});
   }
 }
@@ -363,7 +363,7 @@ function lotDetail(id,l){
   h+='<div class="row between"><h2>Ô tiêu chuẩn ('+ps.length+')</h2><button class="btn pri" data-act="plot-new">+ Đo ô mới</button></div>';
   if(!ps.length)h+='<div class="panel empty"><p class="muted">Chưa có ô nào trong lô này.</p></div>';
   else{h+='<div class="list">';ps.forEach(function(p){var t=plotStats(p,s.f);var nloc=(p.photos||[]).length;
-    h+='<button class="item" data-act="plot-open" data-id="'+esc(p.id)+'"><div><div class="t">Ô '+esc(p.so)+(t.est?' <span class="chip warn">'+t.est+' cây ước H</span>':'')+'</div><div class="s">'+esc([vnDate(p.ngay),p.nguoiDo,t.n+' cây',(p.dienTich||'?')+' m²',Number.isFinite(p.lat)?'có tọa độ':'chưa tọa độ',nloc?nloc+' ảnh':''].filter(Boolean).join(' · '))+'</div></div><div class="v">'+fmt(t.Mha,1)+'<small>m³/ha</small></div></button>';});
+    h+='<button class="item" data-act="plot-open" data-id="'+esc(p.id)+'"><div><div class="t">Ô '+esc(p.so)+(t.est?' <span class="chip warn">'+t.est+' cây ước H</span>':'')+((p.phieu||[]).length&&!p.phieuDone?' <span class="chip warn">Phiếu chưa quét</span>':'')+'</div><div class="s">'+esc([vnDate(p.ngay),p.nguoiDo,t.n+' cây',(p.dienTich||'?')+' m²',Number.isFinite(p.lat)?'có tọa độ':'chưa tọa độ',nloc?nloc+' ảnh':''].filter(Boolean).join(' · '))+'</div></div><div class="v">'+fmt(t.Mha,1)+'<small>m³/ha</small></div></button>';});
     h+='</div>';}
   h+='<p class="note">Hình số f = '+fmt(s.f,2)+' cho '+esc(l.loai||'Khác')+'. Đổi ở mục Tổng hợp.</p>';
   return h;
@@ -374,7 +374,7 @@ function stat(label,val,unit){return '<div class="stat"><span class="lbl">'+labe
 function newDraft(lotId){
   var ps=plotsOf(lotId),so=ps.reduce(function(m,p){return Math.max(m,+p.so||0);},0)+1;
   var last=ps[ps.length-1];
-  return {plotId:null,lotId:lotId,so:so,dienTich:last&&last.dienTich||500,ngay:today(),nguoiDo:last&&last.nguoiDo||'',lat:null,lng:null,ghiChu:'',photos:[],trees:[],dirty:false};
+  return {plotId:null,lotId:lotId,so:so,dienTich:last&&last.dienTich||500,ngay:today(),nguoiDo:last&&last.nguoiDo||'',lat:null,lng:null,ghiChu:'',photos:[],phieu:[],phieuDone:false,trees:[],dirty:false};
 }
 function viewDo(){
   var L=coll('lots'),d=S.draft,h='';
@@ -393,8 +393,8 @@ function viewDo(){
      '<label class="fld"><span>Hvn (m) – có thể bỏ trống</span><input id="tH" inputmode="decimal" autocomplete="off" placeholder="0,0"></label>'+
      '<label class="fld"><span>Phẩm chất</span><select id="tQ">'+['','A','B','C'].map(function(q){return '<option value="'+q+'"'+((S.lastQ||'')===q?' selected':'')+'>'+(q||'–')+'</option>';}).join('')+'</select></label>'+
      '<button class="btn pri" data-act="tree-add">+ Thêm cây</button></div><p class="note" id="tWarn">D1.3 = C1.3 / π, phần mềm tự quy đổi.</p>'+
-     '<div class="row"><span class="lbl">Nhập nhanh</span>'+(S.sampleImg?'<label class="btn sm"><input type="file" id="impImg" accept="image/*" multiple hidden>Quét ảnh phiếu đo</label>':'')+'<label class="btn sm"><input type="file" id="impXls" accept=".xlsx,.xls,.csv" hidden>Từ file Excel</label></div>'+
-     '<div id="imp"></div><div class="trees" id="trees"></div></section>';
+     '<div class="row"><span class="lbl">Nhập nhanh</span>'+(SODO?'<label class="btn sm"><input type="file" id="impLater" accept="image/*" capture="environment" hidden>Chụp phiếu đo (quét sau)</label>':S.sampleImg?'<label class="btn sm"><input type="file" id="impImg" accept="image/*" multiple hidden>Quét ảnh phiếu đo</label>':'<button class="btn sm" data-act="scan-why">Quét ảnh phiếu đo</button>')+'<label class="btn sm"><input type="file" id="impXls" accept=".xlsx,.xls,.csv" hidden>Từ file Excel</label></div>'+
+     phieuBanner(d)+'<div id="imp"></div><div class="trees" id="trees"></div></section>';
   h+='<section class="panel"><h2>Thông tin ô</h2><div class="fields">'+
      fld('Ô số','d_so',d.so,'text','','numeric')+fld('Diện tích ô (m²)','d_dienTich',d.dienTich,'text','500','decimal')+
      '<label class="fld"><span>Ngày đo</span><input id="d_ngay" type="date" value="'+esc(d.ngay)+'"></label>'+fld('Người đo','d_nguoiDo',d.nguoiDo,'text','Họ tên')+'</div>'+
@@ -531,7 +531,7 @@ function savePlot(){
   if(dup){toast('Lô này đã có ô số '+d.so);return;}
   var id=d.plotId||uid();
   put('plots/'+id,{lotId:d.lotId,so:+d.so,dienTich:+d.dienTich,ngay:d.ngay||'',nguoiDo:d.nguoiDo||'',
-    lat:Number.isFinite(d.lat)?d.lat:null,lng:Number.isFinite(d.lng)?d.lng:null,vnX:Number.isFinite(d.vnX)?d.vnX:null,vnY:Number.isFinite(d.vnY)?d.vnY:null,ghiChu:d.ghiChu||'',photos:d.photos.slice(),trees:d.trees.slice(),updatedAt:Date.now()});
+    lat:Number.isFinite(d.lat)?d.lat:null,lng:Number.isFinite(d.lng)?d.lng:null,vnX:Number.isFinite(d.vnX)?d.vnX:null,vnY:Number.isFinite(d.vnY)?d.vnY:null,ghiChu:d.ghiChu||'',photos:d.photos.slice(),phieu:(d.phieu||[]).slice(),phieuDone:!!d.phieuDone,trees:d.trees.slice(),updatedAt:Date.now()});
   toast('Đã lưu ô '+d.so+(S.db?'':' trên máy này'));
   S.lotId=d.lotId;S.draft=null;saveDraft();setView('lo');
 }
@@ -638,6 +638,7 @@ function impAdd(){
     var t={c:Math.round(c*10)/10,d:Math.round(c/Math.PI*100)/100,h:h>0?Math.round(h*10)/10:null};var q=normQ(r.q);if(q)t.q=q;
     d.trees.push(t);n++;});
   var applied=[];
+  if(I.fromPhieu)d.phieuDone=true;
   if(I.meta&&I.useMeta!==false){var m=I.meta;
     if(m.so&&!plotsOf(d.lotId).some(function(p){return +p.so===+m.so&&p.id!==d.plotId;})){d.so=m.so;applied.push('OTC số');}
     if(m.dienTich){d.dienTich=m.dienTich;applied.push('diện tích');}
@@ -653,7 +654,30 @@ function impAdd(){
   if(applied.length)render();else{renderImp();updateTally();}
   toast('Đã thêm '+n+' cây'+(skip?', bỏ '+skip+' dòng thiếu C1.3':'')+(applied.length?'; cập nhật '+applied.join(', '):''));
 }
-async function impFromImages(files){
+function phieuBanner(d){
+  var n=(d.phieu||[]).length;if(!n)return '';
+  var th='<div class="photos">'+d.phieu.map(function(r,i){return '<div class="ph"><img alt="Phiếu '+(i+1)+'" data-ref="'+esc(r)+'">'+(SODO?'<button data-act="phieu-del" data-i="'+i+'" aria-label="Bỏ ảnh phiếu">×</button>':'')+'</div>';}).join('')+'</div>';
+  if(SODO)return '<div class="banner info"><span>Đã chụp '+n+' ảnh phiếu. Phiếu sẽ được quét khi nhập sổ đo vào phần mềm trên Claude.</span>'+th+'</div>';
+  if(d.phieuDone)return '<p class="note">'+n+' ảnh phiếu thực địa đã được quét.</p>';
+  return '<div class="banner info"><span>Ô này có '+n+' ảnh phiếu đo chụp ngoài thực địa, chưa quét.</span>'+th+'<div class="row"><button class="btn sm pri" data-act="scan-phieu">Quét '+n+' ảnh phiếu</button></div></div>';
+}
+async function addPhieu(file){
+  var d=S.draft;if(!d)return;
+  try{var blob=await shrink(file,2600),key=uid();MEM[key]=blob;idbPut(key,blob).catch(function(){});
+    d.phieu=d.phieu||[];d.phieu.push('local:'+key);d.dirty=true;saveDraft();render();toast('Đã lưu ảnh phiếu '+d.phieu.length);}
+  catch(e){toast('Không đọc được ảnh phiếu');}
+}
+async function scanPhieu(){
+  var d=S.draft;if(!d||!(d.phieu||[]).length)return;
+  if(!S.sampleImg){document.querySelector('[data-act=scan-why]')?toast('Chế độ xem này chưa gửi được ảnh cho Claude.'):toast('Cần mở trang trong Claude khi đã đăng nhập để quét ảnh.');return;}
+  var blobs=[];
+  for(var i=0;i<d.phieu.length;i++){var r=d.phieu[i],b=null;
+    try{if(String(r).indexOf('local:')===0){var k=r.slice(6);b=MEM[k]||await idbGet(k);}else{var res=await fetch('/_blob/'+r);if(res.ok)b=await res.blob();}}catch(e){}
+    if(b)blobs.push(b);}
+  if(!blobs.length){toast('Không mở được ảnh phiếu');return;}
+  impFromImages(blobs,true);
+}
+async function impFromImages(files,fromPhieu){
   if(!files.length||!S.sample)return;
   var lim=S.sampleLim&&S.sampleLim.images,max=lim?lim.maxCount:4;
   if(files.length>max){toast('Mỗi lần quét tối đa '+max+' ảnh');files=files.slice(0,max);}
@@ -671,7 +695,7 @@ async function impFromImages(files){
       'Dấu phẩy thập phân đổi thành dấu chấm. Không bịa số. Ô nào nhòe, không chắc thì vẫn ghi giá trị đọc được nhiều khả năng nhất và nêu STT đó trong ghi_chu (tiếng Việt, ngắn). Không lấy dòng tổng cộng hay trung bình.';
     var out=await S.sample.json(prompt,{images:blobs,signal:impCtl.signal,modelTier:'complex'});
     var rows=impRowsFrom((out&&out.trees)||[]);
-    S.imp={rows:rows,meta:cleanMeta(out&&out.dau_phieu),src:files.length+' ảnh',note:(out&&out.ghi_chu)||(rows.length?'':'Không tìm thấy dòng số liệu nào trong ảnh.')};
+    S.imp={fromPhieu:!!fromPhieu,rows:rows,meta:cleanMeta(out&&out.dau_phieu),src:files.length+' ảnh',note:(out&&out.ghi_chu)||(rows.length?'':'Không tìm thấy dòng số liệu nào trong ảnh.')};
   }catch(e){
     var code=e&&e.code;
     S.imp=null;
@@ -744,7 +768,7 @@ function dataURLToBlob(u){var p=String(u).split(','),mime=(p[0].match(/data:([^;
 function stamp(){var d=new Date();return today()+'-'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0');}
 async function buildSodo(){
   var lots=coll('lots'),plots=coll('plots'),photos={};
-  for(var id in plots){var refs=plots[id].photos||[];
+  for(var id in plots){var refs=(plots[id].photos||[]).concat(plots[id].phieu||[]);
     for(var i=0;i<refs.length;i++){var r=refs[i];if(String(r).indexOf('local:')!==0)continue;var key=r.slice(6);
       var b=MEM[key];if(!b){try{b=await idbGet(key);}catch(e){}}if(b)photos[key]=await blobToDataURL(b);}}
   var c=cfg();
@@ -929,7 +953,7 @@ document.addEventListener('click',function(e){
     case 'plot-open':
       if(S.draft&&S.draft.dirty&&S.draft.plotId!==id){toast('Đang có ô đo dở – lưu hoặc hủy ô đó trước');setView('do');break;}
       var p=coll('plots')[id];if(!p)break;
-      S.draft={plotId:id,lotId:p.lotId,so:p.so,dienTich:p.dienTich,ngay:p.ngay,nguoiDo:p.nguoiDo,lat:p.lat,lng:p.lng,vnX:p.vnX,vnY:p.vnY,ghiChu:p.ghiChu,photos:(p.photos||[]).slice(),trees:(p.trees||[]).map(function(t){return Object.assign({},t);}),dirty:false};
+      S.draft={plotId:id,lotId:p.lotId,so:p.so,dienTich:p.dienTich,ngay:p.ngay,nguoiDo:p.nguoiDo,lat:p.lat,lng:p.lng,vnX:p.vnX,vnY:p.vnY,ghiChu:p.ghiChu,photos:(p.photos||[]).slice(),phieu:(p.phieu||[]).slice(),phieuDone:!!p.phieuDone,trees:(p.trees||[]).map(function(t){return Object.assign({},t);}),dirty:false};
       saveDraft();setView('do');break;
     case 'tree-add':addTree();break;
     case 'tree-del':
@@ -958,6 +982,9 @@ document.addEventListener('click',function(e){
       break;
     case 'sync-now':flush();break;
     case 'imp-add':impAdd();break;
+    case 'scan-why':toast(S.sample?'Chế độ xem này chưa gửi được ảnh cho Claude. Mở trang trong ứng dụng Claude hoặc claude.ai và cho phép trang dùng Claude.':'Cần mở trang trong Claude khi đã đăng nhập để quét ảnh.');break;
+    case 'scan-phieu':scanPhieu();break;
+    case 'phieu-del':S.draft.phieu.splice(+b.getAttribute('data-i'),1);S.draft.dirty=true;saveDraft();render();break;
     case 'imp-cancel':S.imp=null;renderImp();break;
     case 'imp-stop':if(impCtl)impCtl.abort();break;
     case 'imp-row-del':S.imp.rows.splice(+b.getAttribute('data-i'),1);renderImp();break;
@@ -978,6 +1005,7 @@ document.addEventListener('change',function(e){
   var t=e.target;
   if(t.id==='phCam'||t.id==='phLib'||t.id==='phGps'){addPhotos(Array.prototype.slice.call(t.files||[]),t.id==='phGps');t.value='';}
   if(t.id==='impMeta'&&S.imp){S.imp.useMeta=t.checked;}
+  if(t.id==='impLater'){if(t.files&&t.files[0])addPhieu(t.files[0]);t.value='';}
   if(t.id==='impImg'){impFromImages(Array.prototype.slice.call(t.files||[]));t.value='';}
   if(t.id==='impSodo'){if(t.files&&t.files[0])importSodo(t.files[0]);t.value='';}
   if(t.id==='impXls'){if(t.files&&t.files[0])impFromExcel(t.files[0]);t.value='';}
