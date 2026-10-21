@@ -773,10 +773,22 @@ th:first-child,td:first-child{text-align:left}
 td{font-family:var(--f-num)} td:first-child{font-family:var(--f-ui);font-weight:600}
 tfoot td{font-weight:700;border-bottom:0}
 .map{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow:hidden}
-.map svg{display:block;width:100%;height:auto}
+.map:not(.lmap) svg{display:block;width:100%;height:auto}
+.lmap{height:calc(100dvh - 210px);min-height:340px}
+.leaflet-control-attribution{font-size:9px!important;line-height:1.4!important;padding:0 4px!important;background:rgba(255,255,255,.55)!important}
+.leaflet-control-scale{margin-bottom:4px!important}.leaflet-control-scale-line{font-size:10px!important;line-height:1.3!important;padding:0 3px!important}
+.leaflet-control-layers-toggle{width:34px!important;height:34px!important;background-size:20px 20px}
+.mapbtns{display:grid;gap:6px}
+.mapbtns button{appearance:none;width:36px;height:36px;border-radius:8px;border:0;background:#fff;color:#15201A;box-shadow:0 1px 4px rgba(0,0,0,.3);display:grid;place-items:center;cursor:pointer;padding:0}
+.mapbtns svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
 .otc-tip{background:rgba(0,0,0,.6);color:#fff;border:0;box-shadow:none;font:600 12px var(--f-ui);padding:1px 6px}
 .otc-tip::before{display:none}
 .leaflet-container{font-family:var(--f-ui)}
+.explots{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px}
+.explot{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:8px;cursor:pointer;background:var(--sunk)}
+.explot.on{border-color:var(--accent);background:var(--accent-soft)}
+.explot input{width:20px;min-height:20px;margin:2px 0 0;flex:none}
+.explot span{display:grid;min-width:0}.explot small{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
 .legend{display:flex;gap:6px 14px;flex-wrap:wrap;font-size:13px}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
@@ -1021,7 +1033,7 @@ function lotFormHtml(){
 function fld(label,id,val,type,ph,im){return '<label class="fld"><span>'+label+'</span><input id="'+id+'" type="'+(type||'text')+'" value="'+esc(val==null?'':val)+'"'+(ph?' placeholder="'+esc(ph)+'"':'')+(im?' inputmode="'+im+'"':'')+'></label>';}
 function lotDetail(id,l){
   var c=cfg(),pl=coll('plots'),s=lotStats(id,l,pl,c),ps=plotsOf(id,pl),h='';
-  h+='<div class="row between"><button class="btn ghost sm" data-act="lot-back">← Danh sách lô</button><div class="row"><button class="btn sm" data-act="lot-edit">Sửa lô</button>'+armBtn('lot-del','Xóa lô','lot-del')+'</div></div>';
+  h+='<div class="row between"><button class="btn ghost sm" data-act="lot-back">← Danh sách lô</button><div class="row">'+((S.downloads||SODO)?'<button class="btn sm" data-act="lot-xlsx">Xuất Excel</button>':'')+'<button class="btn sm" data-act="lot-edit">Sửa lô</button>'+armBtn('lot-del','Xóa lô','lot-del')+'</div></div>';
   h+='<div><p class="lbl">'+esc(l.loai||'Khác')+(l.namTrong?' · trồng '+esc(l.namTrong):'')+'</p><h1>Lô '+esc(l.maLo)+'</h1><p class="muted">'+esc([l.chuRung,l.xa,l.tieuKhu?'TK '+l.tieuKhu:'',l.khoanh?'K '+l.khoanh:'',l.dienTich?fmt(l.dienTich,2)+' ha':''].filter(Boolean).join(' · '))+'</p></div>';
   if(arm('lot-del')&&ps.length)h+='<div class="banner err">Xóa lô sẽ xóa luôn '+ps.length+' ô tiêu chuẩn đã đo.</div>';
   h+='<div class="stats">'+stat('Trữ lượng lô',fmt(s.total,1),'m³')+stat('M bình quân',fmt(s.Mha,1),'m³/ha')+stat('Sai số rút mẫu',Number.isFinite(s.err)?'±'+fmt(s.err,1):'–','%')+stat('Mật độ',fmt(s.Nha,0),'cây/ha')+stat('D1.3 bq',fmt(s.d,1),'cm')+stat('Hvn bq',fmt(s.h,1),'m')+'</div>';
@@ -1500,10 +1512,8 @@ function viewMap(){
   var M=mapPoints(),lots=M.lots,pts=M.pts,h='';
   h+='<div class="row between"><h1>Bản đồ vị trí ô</h1><select id="mapLot" style="width:auto;max-width:100%"><option value="all">Tất cả lô</option>'+lots.map(function(l){return '<option value="'+esc(l.id)+'"'+(S.mapLot===l.id?' selected':'')+'>Lô '+esc(l.maLo)+'</option>';}).join('')+'</select></div>';
   if(useLeaflet()){
-    h+='<div class="map" id="lmap" style="height:62vh;min-height:320px"></div>';
-    h+='<div class="row"><button class="btn sm" data-act="map-me">Vị trí của tôi</button>'+(pts.length?'<button class="btn sm ghost" data-act="map-fit">Xem tất cả ô</button>':'')+'</div>';
+    h+='<div class="map lmap" id="lmap"></div>';
     if(!pts.length)h+='<p class="note">Chưa có ô nào có tọa độ. Ảnh vệ tinh vẫn xem được để định hướng.</p>';
-    h+='<p class="note">Ảnh vệ tinh cần mạng. Vùng nào đã xem khi có sóng thì máy lưu lại, ra rừng mất sóng vẫn xem được vùng đó.</p>';
   }else{
     if(!pts.length)return h+'<div class="panel empty"><h2>Chưa có ô nào có tọa độ</h2><p class="muted">Lấy vị trí hiện tại hoặc nhập tọa độ khi đo ô để ô hiện lên đây.</p></div>';
     var la=pts.map(function(p){return p.lat;}),lo=pts.map(function(p){return p.lng;}),cla=(Math.min.apply(null,la)+Math.max.apply(null,la))/2,clo=(Math.min.apply(null,lo)+Math.max.apply(null,lo))/2;
@@ -1519,13 +1529,20 @@ function initLeaflet(){
   var el=$('#lmap');if(!el||!window.L)return;
   if(lmap){try{lmap.remove();}catch(e){}lmap=null;lmeLayer=null;}
   var M=mapPoints();
-  lmap=L.map(el,{zoomControl:true,attributionControl:true}).setView([9.3,104.95],11);
-  var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,maxNativeZoom:18,attribution:'Ảnh vệ tinh © Esri, Maxar, Earthstar Geographics'});
+  var touch=('ontouchstart' in window)||navigator.maxTouchPoints>0;
+  lmap=L.map(el,{zoomControl:!touch,attributionControl:false}).setView([9.3,104.95],11);
+  L.control.attribution({prefix:false,position:'bottomright'}).addTo(lmap);
+  var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,maxNativeZoom:18,attribution:'© Esri'});
   var lbl=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,maxNativeZoom:18});
   var osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
   var satG=L.layerGroup([sat,lbl]).addTo(lmap);
   L.control.layers({'Vệ tinh':satG,'Bản đồ đường':osm},null,{position:'topright'}).addTo(lmap);
-  L.control.scale({imperial:false}).addTo(lmap);
+  L.control.scale({imperial:false,maxWidth:80}).addTo(lmap);
+  var Btns=L.Control.extend({options:{position:'topleft'},onAdd:function(){var d=L.DomUtil.create('div','mapbtns');
+    d.innerHTML='<button type="button" title="Vị trí của tôi" aria-label="Vị trí của tôi"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>'+(M.pts.length?'<button type="button" title="Xem tất cả ô" aria-label="Xem tất cả ô"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>':'');
+    var bs=d.querySelectorAll('button');bs[0].addEventListener('click',mapMe);if(bs[1])bs[1].addEventListener('click',mapFit);
+    L.DomEvent.disableClickPropagation(d);return d;}});
+  new Btns().addTo(lmap);
   var group=[];
   M.pts.forEach(function(p){
     var mk=L.circleMarker([p.lat,p.lng],{radius:p.id===S.mapSel?10:8,color:'#ffffff',weight:2,fillColor:M.hex[p.lotId],fillOpacity:1}).addTo(lmap);
@@ -1537,6 +1554,7 @@ function initLeaflet(){
   if(group.length===1)lmap.setView(group[0],17);else if(group.length)lmap.fitBounds(group,{padding:[30,30],maxZoom:18});
   setTimeout(function(){try{lmap.invalidateSize();}catch(e){}},50);
 }
+function mapFit(){if(lmap&&S._mapPts&&S._mapPts.length){if(S._mapPts.length===1)lmap.setView(S._mapPts[0],17);else lmap.fitBounds(S._mapPts,{padding:[30,30],maxZoom:18});}}
 function mapMe(){
   if(!lmap||!navigator.geolocation){toast('Chưa lấy được vị trí');return;}
   toast('Đang lấy vị trí…');
@@ -1581,9 +1599,10 @@ function viewSum(){
       h+='<tr><td>'+esc(l.maLo)+'</td><td style="font-family:var(--f-ui)">'+esc(l.loai||'')+'</td><td>'+fmt(+l.dienTich,2)+'</td><td>'+s.plots+'</td><td>'+fmt(s.Nha,0)+'</td><td>'+fmt(s.d,1)+'</td><td>'+fmt(s.h,1)+'</td><td>'+fmt(s.Mha,1)+'</td><td>'+(Number.isFinite(s.err)?'±'+fmt(s.err,1):'–')+'</td><td>'+fmt(s.total,1)+'</td></tr>';});
     h+='</tbody><tfoot><tr><td>Cộng</td><td></td><td>'+fmt(area,2)+'</td><td>'+np+'</td><td></td><td></td><td></td><td></td><td></td><td>'+fmt(tot,1)+'</td></tr></tfoot></table></div>';
   }
-  h+='<section class="panel"><h2>Xuất dữ liệu</h2><p class="muted">File Excel gồm 3 trang: tổng hợp lô, ô tiêu chuẩn, số liệu từng cây. GeoJSON mở được bằng QGIS hoặc Google Earth.</p>';
-  if(S.downloads||SODO)h+='<div class="row"><button class="btn pri" data-act="xlsx"'+(lots.length?'':' disabled')+'>Xuất Excel</button><button class="btn" data-act="geojson"'+(lots.length?'':' disabled')+'>Xuất GeoJSON</button></div>';
-  else h+='<p class="note">Chức năng lưu file chưa sẵn sàng ở chế độ xem này. Mở trang trong ứng dụng Claude khi đã đăng nhập.</p>';
+  h+='<section class="panel"><h2>Xuất dữ liệu</h2><p class="muted">Chọn lô và khoảng ngày đo cần xuất. File Excel có trang tổng hợp lô, ô tiêu chuẩn và số liệu từng cây; GeoJSON mở được bằng QGIS hoặc Google Earth.</p>';
+  if(lots.length){var EP=expPanel();h+=EP.html;
+    if(S.downloads||SODO)h+='<div class="row"><button class="btn pri" data-act="xlsx"'+(EP.count?'':' disabled')+'>Xuất Excel</button><button class="btn" data-act="geojson"'+(EP.count?'':' disabled')+'>Xuất GeoJSON</button></div>';
+    else h+='<p class="note">Chức năng lưu file chưa sẵn sàng ở chế độ xem này. Mở trang trong ứng dụng Claude khi đã đăng nhập.</p>';}
   h+='</section>';
   h+='<section class="panel"><h2>Hệ tọa độ VN-2000</h2><p class="muted">Dùng khi đổi X, Y trên phiếu sang WGS84: múi chiếu 3°, k₀ = 0,9999, tích chuyển 7 tham số theo QĐ 05/2007/QĐ-BTNMT. Cà Mau, Kiên Giang dùng KTT 104°30′.</p><div class="fields">'+fld('Kinh tuyến trục','cfg_ktt',kttTxt(c.ktt),'text',"104°30'")+'</div><div class="row"><button class="btn" data-act="f-save">Lưu</button></div></section>';
   h+='<section class="panel"><h2>Hình số thân cây (f)</h2><p class="muted">V cây = π/4 × (D1.3/100)² × Hvn × f. Cây bỏ trống Hvn lấy Hvn bình quân của ô. Điều chỉnh f theo biểu thể tích đơn vị đang áp dụng.</p><div class="fields">'+
@@ -1607,8 +1626,8 @@ function viewSum(){
   h+='<p class="note">Trang cần mạng để mở. Khi đã mở, có thể đo tiếp lúc mất sóng: số liệu và ảnh được giữ trên điện thoại và tự gửi khi có sóng trở lại. Đừng đóng trang hay xóa dữ liệu trình duyệt trước khi thấy "Đã đồng bộ".</p></section>';
   return h;
 }
-function exportRows(){
-  var lots=lotsSorted(),pl=coll('plots'),c=cfg(),A=[],B=[],C=[];
+function exportRows(lots,pl){
+  lots=lots||lotsSorted();pl=pl||coll('plots');var c=cfg(),A=[],B=[],C=[];
   A.push(['Mã lô','Chủ rừng','Xã','Tiểu khu','Khoảnh','Loài','Năm trồng','Diện tích (ha)','Số ô','N (cây/ha)','D1.3 bq (cm)','Hvn bq (m)','M bq (m³/ha)','Sai số Δ (%)','Trữ lượng lô (m³)','Hình số f']);
   B.push(['Mã lô','Ô số','Ngày đo','Người đo','Diện tích ô (m²)','Vĩ độ','Kinh độ','X VN-2000','Y VN-2000','Số cây','D1.3 bq (cm)','Hvn bq (m)','G (m²/ha)','V ô (m³)','M (m³/ha)','Số ảnh','Ghi chú']);
   C.push(['Mã lô','Ô số','STT cây','C1.3 (cm)','D1.3 (cm)','Hvn đo (m)','Hvn dùng tính (m)','Phẩm chất','V cây (m³)']);
@@ -1628,21 +1647,48 @@ async function saveFile(filename,data,okMsg){
   try{await S.downloads.save({filename:filename,data:data});toast(okMsg);}
   catch(e){toast((e&&/declin|cancel/i.test(String(e.code||e.message)))?'Đã hủy lưu file':'Không lưu được file'+(e&&e.message?': '+e.message:''));}
 }
-function exportXlsx(){
+function expState(){if(!S.exp)S.exp=lsGet('dtr.exp.v1',null)||{sel:null,from:'',to:'',mode:'gop'};return S.exp;}
+function saveExp(){lsSet('dtr.exp.v1',S.exp);}
+function expLots(){var E=expState(),all=lotsSorted();return E.sel?all.filter(function(l){return E.sel.indexOf(l.id)>=0;}):all;}
+function expPlots(){var E=expState(),pl=coll('plots'),o={};Object.keys(pl).forEach(function(id){var d=pl[id].ngay||'';if(E.from&&d&&d<E.from)return;if(E.to&&d&&d>E.to)return;o[id]=pl[id];});return o;}
+function slug(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'');}
+function sheetName(s,used){var n=String(s).replace(/[\[\]:*?\/\\]/g,'-').slice(0,31),k=n,i=2;while(used[k]){k=n.slice(0,28)+' ('+i+')';i++;}used[k]=1;return k;}
+function expName(lots,ext,prefix){return (prefix||'dieu-tra')+(lots.length===1?'-lo-'+slug(lots[0].maLo):'-'+lots.length+'-lo')+'-'+today()+'.'+ext;}
+function widths(rows){var w=[];rows.forEach(function(r){r.forEach(function(v,i){w[i]=Math.max(w[i]||8,Math.min(40,String(v==null?'':v).length+2));});});return w.map(function(x){return {wch:x};});}
+function exportXlsx(onlyLot){
   if(!window.XLSX){toast('Chưa tải được thư viện Excel, kiểm tra mạng');return;}
-  var R=exportRows(),wb=XLSX.utils.book_new(),names=['Tổng hợp lô','Ô tiêu chuẩn','Số liệu cây'];
-  R.forEach(function(rows,i){var ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=rows[0].map(function(h){return {wch:Math.max(10,String(h).length+2)};});XLSX.utils.book_append_sheet(wb,ws,names[i]);});
+  var E=expState(),lots=onlyLot?lotsSorted().filter(function(l){return l.id===onlyLot;}):expLots(),pl=onlyLot?coll('plots'):expPlots();
+  if(!lots.length){toast('Chưa chọn lô nào để xuất');return;}
+  var R=exportRows(lots,pl),wb=XLSX.utils.book_new(),used={};
+  function add(rows,name){var ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=widths(rows);XLSX.utils.book_append_sheet(wb,ws,sheetName(name,used));}
+  add(R[0],'Tổng hợp lô');
+  if(E.mode==='tach'&&!onlyLot&&lots.length>1){
+    lots.forEach(function(l){var r=exportRows([l],pl),rows=[['LÔ '+l.maLo+(l.chuRung?' – '+l.chuRung:'')],[],['Ô TIÊU CHUẨN']].concat(r[1]).concat([[],['SỐ LIỆU CÂY']]).concat(r[2]);add(rows,'Lô '+l.maLo);});
+  }else{add(R[1],'Ô tiêu chuẩn');add(R[2],'Số liệu cây');}
   var out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
-  saveFile('dieu-tra-rung-'+today()+'.xlsx',new Uint8Array(out),'Đã lưu file Excel');
+  saveFile(expName(lots,'xlsx'),new Uint8Array(out),'Đã lưu file Excel '+(lots.length===1?'lô '+lots[0].maLo:lots.length+' lô'));
 }
 function exportGeo(){
-  var L=coll('lots'),pl=coll('plots'),c=cfg(),F=[];
-  Object.keys(pl).forEach(function(id){var p=pl[id],l=L[p.lotId];if(!l||!Number.isFinite(p.lat)||!Number.isFinite(p.lng))return;var t=plotStats(p,fOf(l,c));
-    F.push({type:'Feature',geometry:{type:'Point',coordinates:[p.lng,p.lat]},properties:{ma_lo:l.maLo,o_so:p.so,loai:l.loai||'',ngay:p.ngay||'',so_cay:t.n,M_m3ha:Math.round(t.Mha*100)/100}});});
-  if(!F.length){toast('Chưa có ô nào có tọa độ');return;}
-  saveFile('o-tieu-chuan-'+today()+'.geojson',JSON.stringify({type:'FeatureCollection',features:F},null,1),'Đã lưu file GeoJSON');
+  var lots=expLots(),pl=expPlots(),ok={},c=cfg(),F=[],L=coll('lots');lots.forEach(function(l){ok[l.id]=1;});
+  if(!lots.length){toast('Chưa chọn lô nào để xuất');return;}
+  Object.keys(pl).forEach(function(id){var p=pl[id],l=L[p.lotId];if(!l||!ok[p.lotId]||!Number.isFinite(p.lat)||!Number.isFinite(p.lng))return;var t=plotStats(p,fOf(l,c));
+    F.push({type:'Feature',geometry:{type:'Point',coordinates:[p.lng,p.lat]},properties:{ma_lo:l.maLo,chu_rung:l.chuRung||'',o_so:p.so,loai:l.loai||'',ngay:p.ngay||'',so_cay:t.n,M_m3ha:Math.round(t.Mha*100)/100}});});
+  if(!F.length){toast('Các lô đã chọn chưa có ô nào có tọa độ');return;}
+  saveFile(expName(lots,'geojson','o-tieu-chuan'),JSON.stringify({type:'FeatureCollection',features:F},null,1),'Đã lưu file GeoJSON');
 }
-
+function expPanel(){
+  var E=expState(),lots=lotsSorted(),pl=expPlots(),sel=E.sel,h='';
+  if(sel)sel=sel.filter(function(id){return lots.some(function(l){return l.id===id;});});
+  var chosen=lots.filter(function(l){return !sel||sel.indexOf(l.id)>=0;}),np=0;
+  chosen.forEach(function(l){np+=plotsOf(l.id,pl).length;});
+  h+='<div class="row between"><span class="lbl">Chọn lô cần xuất</span><span class="row" style="gap:6px"><button class="btn sm ghost" data-act="exp-all">Chọn tất cả</button><button class="btn sm ghost" data-act="exp-none">Bỏ chọn</button></span></div>';
+  h+='<div class="explots">'+lots.map(function(l){var n=plotsOf(l.id,pl).length,on=!sel||sel.indexOf(l.id)>=0;
+    return '<label class="explot'+(on?' on':'')+'"><input type="checkbox" data-explot="'+esc(l.id)+'"'+(on?' checked':'')+'><span><b>Lô '+esc(l.maLo)+'</b><small>'+esc([l.chuRung,n+' ô'].filter(Boolean).join(' · '))+'</small></span></label>';}).join('')+'</div>';
+  h+='<div class="fields"><label class="fld"><span>Đo từ ngày</span><input type="date" id="exp_from" value="'+esc(E.from)+'"></label><label class="fld"><span>Đến ngày</span><input type="date" id="exp_to" value="'+esc(E.to)+'"></label></div>';
+  h+='<div class="row" role="radiogroup" aria-label="Cách xuất Excel"><label class="row" style="gap:6px"><input type="radio" name="expMode" value="gop"'+(E.mode!=='tach'?' checked':'')+' style="width:20px;min-height:20px">Gộp các lô chung bảng</label><label class="row" style="gap:6px"><input type="radio" name="expMode" value="tach"'+(E.mode==='tach'?' checked':'')+' style="width:20px;min-height:20px">Mỗi lô một trang tính riêng</label></div>';
+  h+='<p class="note"><strong>Đã chọn '+chosen.length+' lô · '+np+' ô</strong>'+(E.from||E.to?' (lọc theo ngày đo)':'')+'</p>';
+  return {html:h,count:chosen.length};
+}
 /* ---------- Sự kiện ---------- */
 document.addEventListener('click',function(e){
   var nav=e.target.closest('[data-nav]');if(nav){setView(nav.getAttribute('data-nav'));return;}
@@ -1690,6 +1736,9 @@ document.addEventListener('click',function(e){
     case 'map-me':mapMe();break;
     case 'map-fit':if(lmap&&S._mapPts&&S._mapPts.length){if(S._mapPts.length===1)lmap.setView(S._mapPts[0],17);else lmap.fitBounds(S._mapPts,{padding:[30,30],maxZoom:18});}break;
     case 'xlsx':exportXlsx();break;
+    case 'lot-xlsx':exportXlsx(S.lotId);break;
+    case 'exp-all':expState().sel=null;saveExp();render();break;
+    case 'exp-none':expState().sel=[];saveExp();render();break;
     case 'geojson':exportGeo();break;
     case 'f-save':
       var f={};document.querySelectorAll('[data-sp]').forEach(function(i){var v=num(i.value);if(v>0&&v<=1)f[i.getAttribute('data-sp')]=v;});
@@ -1729,6 +1778,11 @@ document.addEventListener('change',function(e){
   if(t.id==='impImg'){impFromImages(Array.prototype.slice.call(t.files||[]));t.value='';}
   if(t.id==='impSodo'){if(t.files&&t.files[0])importSodo(t.files[0]);t.value='';}
   if(t.id==='impXls'){if(t.files&&t.files[0])impFromExcel(t.files[0]);t.value='';}
+  if(t.hasAttribute&&t.hasAttribute('data-explot')){var E=expState(),all=lotsSorted().map(function(l){return l.id;}),cur=E.sel?E.sel.slice():all.slice(),id2=t.getAttribute('data-explot');
+    if(t.checked){if(cur.indexOf(id2)<0)cur.push(id2);}else cur=cur.filter(function(x){return x!==id2;});
+    E.sel=cur.length===all.length?null:cur;saveExp();render();}
+  if(t.id==='exp_from'||t.id==='exp_to'){expState()[t.id==='exp_from'?'from':'to']=t.value;saveExp();render();}
+  if(t.name==='expMode'){expState().mode=t.value;saveExp();}
   if(t.id==='mapLot'){S.mapLot=t.value;S.mapSel=null;render();}
 });
 document.addEventListener('submit',function(e){
