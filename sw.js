@@ -1,4 +1,4 @@
-const C='sodo-20261024-1147';
+const C='sodo-20261024-1310';
 const CORE=['./','./index.html','./xlsx.full.min.js','./manifest.webmanifest','./icon-192.png','./icon-512.png','./leaflet.js','./docx.umd.js'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(CORE.map(u=>new Request(u,{cache:'reload'})))));self.skipWaiting();});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C&&k!=='sodo-tiles').map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});

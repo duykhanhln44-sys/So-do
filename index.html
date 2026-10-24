@@ -786,6 +786,14 @@ tfoot td{font-weight:700;border-bottom:0}
 .vx{background:#fff;border:3px solid #0A6B58;border-radius:50%;box-shadow:0 0 0 2px rgba(0,0,0,.25)}
 .vx.last{border-color:#E0A030}.vx.sel{background:#D13B5C;border-color:#fff}
 .htdot{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.lot-lbl{background:none;border:0;pointer-events:none;width:0!important;height:0!important}
+.lmap{isolation:isolate;position:relative;z-index:0}
+.lot-lbl div{position:absolute;left:0;top:0;transform:translate(-50%,calc(-100% - 14px));white-space:nowrap;text-align:center}
+.lot-lbl b{display:block;font:700 13px var(--f-ui);color:#fff;text-shadow:0 0 3px #000,0 0 3px #000}
+.lot-lbl span{display:block;font:600 11px var(--f-num);color:#fff;text-shadow:0 0 3px #000,0 0 3px #000}
+.vx.mid{background:rgba(255,255,255,.85);border:2px solid #0A6B58;box-shadow:none;opacity:.85}
+.maptools{display:grid;gap:10px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:12px}
+.vlist{display:grid;gap:6px}.vrow{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line)}
 .drawbar{display:grid;gap:10px;border:1px solid var(--accent);background:var(--accent-soft);border-radius:var(--r);padding:12px}
 .vnbox{display:grid;gap:10px;border:1px solid var(--line);border-radius:var(--r);padding:12px;background:var(--sunk)}
 .otc-tip{background:rgba(0,0,0,.6);color:#fff;border:0;box-shadow:none;font:600 12px var(--f-ui);padding:1px 6px}
@@ -838,7 +846,7 @@ nav.tabs button[aria-current="page"]{color:var(--accent);background:var(--accent
 
 <script src="xlsx.full.min.js"></script>
 <script src="leaflet.js"></script>
-<script>window.__SODO__=true;window.__SODO_VER__='20261024-1147';</script>
+<script>window.__SODO__=true;window.__SODO_VER__='20261024-1310';</script>
 <script>
 (function(){
 'use strict';
@@ -988,6 +996,7 @@ function renderSync(){
 }
 function setView(v,keepLot){
   if(VIEWS.indexOf(v)<0)v='lo';
+  if(S.view==='bando'&&v!=='bando'&&S.draw&&!S.draw.pts.length){if(typeof stopTrack==='function')stopTrack();S.draw=null;saveDraw();}
   S.view=v;S.armed=null;if(!keepLot&&v!=='lo')S.lotForm=null;
   try{history.replaceState(null,'','#'+v);}catch(e){}
   document.querySelectorAll('[data-nav]').forEach(function(b){b.toggleAttribute('aria-current',b.getAttribute('data-nav')===v);if(b.getAttribute('data-nav')===v)b.setAttribute('aria-current','page');});
@@ -1023,7 +1032,7 @@ function viewLo(){
   }
   h+='<div class="list">';
   lots.forEach(function(l){var s=lotStats(l.id,l,pl,c);
-    h+='<button class="item" data-act="lot-open" data-id="'+esc(l.id)+'"><div><div class="t">'+esc(l.maLo||'(chưa đặt mã)')+' <span class="chip">'+esc(l.loai||'Khác')+'</span></div><div class="s">'+esc([l.chuRung,l.xa,areaTxt(l)].filter(Boolean).join(' · '))+' · '+s.plots+' ô</div></div><div class="v">'+(Number.isFinite(s.total)?fmt(s.total,1)+' m³':'–')+'<small>'+(Number.isFinite(s.Mha)?fmt(s.Mha,1)+' m³/ha':'chưa đo')+'</small></div></button>';});
+    h+='<button class="item" data-act="lot-open" data-id="'+esc(l.id)+'"><div><div class="t">'+esc(l.maLo||'(chưa đặt mã)')+' <span class="chip">'+esc(l.loai||'Khác')+'</span>'+(lotVung(l).length?' <span class="chip">Có ranh bản đồ</span>':'')+'</div><div class="s">'+esc([l.chuRung,l.xa,areaTxt(l)].filter(Boolean).join(' · '))+' · '+s.plots+' ô</div></div><div class="v">'+(Number.isFinite(s.total)?fmt(s.total,1)+' m³':'–')+'<small>'+(Number.isFinite(s.Mha)?fmt(s.Mha,1)+' m³/ha':'chưa đo')+'</small></div></button>';});
   return h+'</div>';
 }
 function lotFormHtml(){
@@ -1545,7 +1554,7 @@ function vungInfoHtml(){
   var v=lotVung(l).filter(function(x){return x.id===V.vid;})[0];if(!v)return '';
   return '<div class="panel"><div class="row between"><h2><span class="htdot" style="background:'+htColor(v.ht)+'"></span>'+esc(v.ht)+' · Lô '+esc(l.maLo)+'</h2></div>'+
     '<p class="mono">'+fmt(polyArea(v.pts)/10000,3)+' ha · chu vi '+fmt(polyPerim(v.pts),0)+' m · '+v.pts.length+' điểm</p>'+(v.ghiChu?'<p class="muted">'+esc(v.ghiChu)+'</p>':'')+
-    '<div class="row"><button class="btn sm" data-act="vung-edit">Sửa ranh</button>'+armBtn('vung-del','Xóa vùng','vung-del')+'</div></div>';
+    '<div class="row">'+(S.mapLot!==V.lotId?'<button class="btn sm pri" data-act="map-pick" data-id="'+esc(V.lotId)+'">Chọn lô này</button>':'')+'<button class="btn sm" data-act="lot-goto" data-id="'+esc(V.lotId)+'">Mở lô</button><button class="btn sm" data-act="vung-edit">Sửa ranh</button>'+armBtn('vung-del','Xóa vùng','vung-del')+'</div></div>';
 }
 function drawVung(){
   if(!lmap)return;if(vungLayer)lmap.removeLayer(vungLayer);vungLayer=L.layerGroup().addTo(lmap);
@@ -1555,7 +1564,16 @@ function drawVung(){
       pg.bindTooltip('Lô '+l.maLo+' · '+v.ht+' · '+fmt(polyArea(v.pts)/10000,2)+' ha',{sticky:true});
       pg.on('click',function(e){if(S.draw)return;L.DomEvent.stopPropagation(e);S.mapSel=null;S.vungSel={lotId:l.id,vid:v.id};S.armed=null;var mi=$('#mapInfo');if(mi)mi.innerHTML=vungInfoHtml();});
     });
+    var lb=lotLabelPos(l,S.draw&&S.draw.vid);
+    if(lb)L.marker(lb,{interactive:false,keyboard:false,icon:L.divIcon({className:'lot-lbl',html:'<div><b>Lô '+esc(l.maLo)+'</b>'+(Number.isFinite(lotArea(l).ha)?'<span>'+fmt(lotArea(l).ha,2)+' ha</span>':'')+'</div>',iconSize:[0,0]})}).addTo(vungLayer);
   });
+}
+function lotLabelPos(l,skipVid){
+  var V=lotVung(l).filter(function(v){return v.pts&&v.pts.length>=3&&v.id!==skipVid;});if(!V.length)return null;
+  var big=V.reduce(function(a,v){return polyArea(v.pts)>polyArea(a.pts)?v:a;},V[0]),A=0,cx=0,cy=0,P=big.pts,n=P.length;
+  for(var i=0;i<n;i++){var p=P[i],q=P[(i+1)%n],cr=p[1]*q[0]-q[1]*p[0];A+=cr;cx+=(p[0]+q[0])*cr;cy+=(p[1]+q[1])*cr;}
+  if(Math.abs(A)<1e-14)return [avg(P.map(function(x){return x[0];})),avg(P.map(function(x){return x[1];}))];
+  return [cx/(3*A),cy/(3*A)];
 }
 function addDrawPt(ll){var D=S.draw;if(!D)return;D.pts.push([+(+ll[0]).toFixed(7),+(+ll[1]).toFixed(7)]);S.drawSel=null;saveDraw();drawRender();}
 function drawRender(){
@@ -1569,24 +1587,47 @@ function drawRender(){
         m.on('dragend',function(ev){var ll=ev.target.getLatLng();D.pts[i]=[+ll.lat.toFixed(7),+ll.lng.toFixed(7)];saveDraw();drawRender();});
         m.on('click',function(ev){L.DomEvent.stopPropagation(ev);S.drawSel=(S.drawSel===i?null:i);drawRender();});
       });
+      var ne=D.pts.length>=3?D.pts.length:D.pts.length-1;
+      for(var j=0;j<ne;j++)(function(j){var a=D.pts[j],b=D.pts[(j+1)%D.pts.length],mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+        var mm=L.marker(mid,{draggable:true,icon:L.divIcon({className:'vx mid',iconSize:[14,14]})}).addTo(drawLayer);
+        mm.on('click',function(ev){L.DomEvent.stopPropagation(ev);D.pts.splice(j+1,0,[+mid[0].toFixed(7),+mid[1].toFixed(7)]);S.drawSel=j+1;saveDraw();drawRender();});
+        mm.on('dragend',function(ev){var ll=ev.target.getLatLng();D.pts.splice(j+1,0,[+ll.lat.toFixed(7),+ll.lng.toFixed(7)]);S.drawSel=null;saveDraw();drawRender();});})(j);
     }
   }
   drawBar();
 }
+function mapIntoView(){var mp=$('#lmap');if(mp)try{mp.scrollIntoView({block:'start',behavior:'smooth'});}catch(e){}}
+function mapToolsHtml(){
+  var L0=coll('lots'),l=S.mapLot!=='all'?L0[S.mapLot]:null,h='';
+  if(S.mapEdit&&L0[S.mapEdit]){var e=L0[S.mapEdit];
+    return '<div class="drawbar"><strong>Sửa thông tin lô '+esc(e.maLo)+'</strong><div class="fields">'+fld('Mã lô *','me_maLo',e.maLo)+fld('Chủ rừng','me_chuRung',e.chuRung)+fld('Xã','me_xa',e.xa)+fld('Tiểu khu','me_tieuKhu',e.tieuKhu)+fld('Khoảnh','me_khoanh',e.khoanh)+
+      '<label class="fld"><span>Loài cây</span><select id="me_loai">'+Object.keys(cfg().f).map(function(k){return '<option'+(k===(e.loai||'Keo lai')?' selected':'')+'>'+esc(k)+'</option>';}).join('')+'</select></label>'+fld('Năm trồng','me_namTrong',e.namTrong,'text','','numeric')+'</div>'+
+      '<label class="fld"><span>Ghi chú</span><input id="me_ghiChu" value="'+esc(e.ghiChu||'')+'"></label><div class="row"><button class="btn sm" data-act="map-lot-edit-cancel">Hủy</button><button class="btn sm pri" data-act="map-lot-edit-save">Lưu thông tin</button></div></div>';}
+  h+='<div class="maptools"><div class="row"><button class="btn sm pri" data-act="draw-newlot">+ Khoanh vẽ lô mới</button>';
+  if(l)h+='<button class="btn sm" data-act="draw-start">Khoanh thêm vùng</button><button class="btn sm" data-act="map-lot-edit">Sửa thông tin lô</button>'+armBtn('map-lot-del','Xóa lô','map-lot-del');
+  h+='</div>';
+  if(l){var V=lotVung(l),np=plotsOf(S.mapLot).length;
+    if(arm('map-lot-del'))h+='<div class="banner err">Xóa lô '+esc(l.maLo)+' sẽ xóa luôn '+V.length+' vùng khoanh vẽ và '+np+' ô tiêu chuẩn. Bấm nút xóa lần nữa để xác nhận.</div>';
+    h+='<div class="row between"><strong>Lô '+esc(l.maLo)+(l.chuRung?' · '+esc(l.chuRung):'')+'</strong><span class="mono">'+(Number.isFinite(lotArea(l).ha)?fmt(lotArea(l).ha,4)+' ha':'')+'</span></div>';
+    if(V.length)h+='<div class="vlist">'+V.map(function(v,i){var k='mvd-'+v.id;return '<div class="vrow"><span><span class="htdot" style="background:'+htColor(v.ht)+'"></span>Vùng '+(i+1)+' · '+esc(v.ht)+' · <span class="mono">'+fmt(polyArea(v.pts)/10000,3)+' ha</span></span><span class="row" style="gap:6px"><button class="btn sm" data-act="map-vung-edit" data-id="'+esc(v.id)+'">Điều chỉnh ranh</button><button class="btn sm danger'+(arm(k)?' armed':'')+'" data-act="map-vung-del" data-id="'+esc(v.id)+'">'+(arm(k)?'Xóa?':'Xóa')+'</button></span></div>';}).join('')+'</div>';
+    else h+='<p class="note">Lô chưa có vùng khoanh vẽ. Bấm "Khoanh thêm vùng" để vẽ ranh.</p>';}
+  else h+='<p class="note">Chọn một lô ở ô phía trên, hoặc chạm vào lô trên bản đồ rồi bấm "Chọn lô này", để điều chỉnh hay xóa lô.</p>';
+  return h+'</div>';
+}
 function drawBar(){
   var el=$('#drawBar');if(!el)return;var D=S.draw,L0=coll('lots');
-  if(!D){
-    el.innerHTML=S.mapLot!=='all'&&L0[S.mapLot]?'<div class="row"><button class="btn pri" data-act="draw-start">Khoanh vẽ hiện trạng lô '+esc(L0[S.mapLot].maLo)+'</button></div>':'<p class="note">Chọn một lô ở ô phía trên để khoanh vẽ hiện trạng.</p>';
-    return;
-  }
+  if(!D){el.innerHTML=mapToolsHtml();return;}
   var l=L0[D.lotId],a=polyArea(D.pts)/10000,pr=polyPerim(D.pts);
-  el.innerHTML='<div class="drawbar"><div class="row between"><strong>'+(D.vid?'Sửa ranh':'Vẽ vùng mới')+' · Lô '+esc(l?l.maLo:'')+'</strong><span class="mono">'+D.pts.length+' điểm · '+fmt(a,3)+' ha · '+fmt(pr,0)+' m</span></div>'+
+  el.innerHTML='<div class="drawbar"><div class="row between"><strong>'+(D.newLot?'Khoanh vẽ lô mới':(D.vid?'Sửa ranh':'Vẽ vùng mới')+' · Lô '+esc(l?l.maLo:''))+'</strong><span class="mono">'+D.pts.length+' điểm · '+fmt(a,3)+' ha · '+fmt(pr,0)+' m</span></div>'+
+    (D.newLot?'<div class="fields"><label class="fld"><span>Lô rừng</span><select id="draw_pick"><option value="">+ Tạo lô mới</option>'+lotsSorted().map(function(x){return '<option value="'+esc(x.id)+'"'+(D.info.pick===x.id?' selected':'')+'>Lô '+esc(x.maLo)+(x.chuRung?' – '+esc(x.chuRung):'')+(lotVung(x).length?' (đã có ranh)':'')+'</option>';}).join('')+'</select></label></div>':'')+
+    (D.newLot&&!D.info.pick?'<div class="fields">'+fld('Mã lô *','draw_maLo',D.info.maLo,'text','VD: TK12-K3-L5')+fld('Chủ rừng','draw_chuRung',D.info.chuRung)+fld('Xã','draw_xa',D.info.xa)+
+      '<label class="fld"><span>Loài cây</span><select id="draw_loai">'+Object.keys(cfg().f).map(function(k){return '<option'+(k===D.info.loai?' selected':'')+'>'+esc(k)+'</option>';}).join('')+'</select></label>'+fld('Năm trồng','draw_namTrong',D.info.namTrong,'text','VD: 2020','numeric')+'</div>':'')+
     '<div class="fields"><label class="fld"><span>Hiện trạng</span><select id="draw_ht">'+HT.map(function(h){return '<option'+(h[0]===D.ht?' selected':'')+'>'+h[0]+'</option>';}).join('')+'</select></label>'+
     '<label class="fld"><span>Ghi chú</span><input id="draw_note" value="'+esc(D.ghiChu||'')+'" placeholder="VD: Keo lai 4 năm, mật độ thưa"></label></div>'+
     '<div class="row"><button class="btn sm" data-act="draw-gps">+ Điểm tại chỗ tôi đứng</button><button class="btn sm'+(trackWatch!==null?' pri':'')+'" data-act="draw-track">'+(trackWatch!==null?'Dừng ghi vết':'Ghi vết đi bộ quanh ranh')+'</button></div>'+
     (trackWatch!==null?'<p class="note">Đang ghi vết: cứ đi 8 m thêm 1 điểm'+(trackAcc?' · sai số GPS ±'+Math.round(trackAcc)+' m':'')+'</p>':'<p class="note">Chạm lên bản đồ để thêm điểm, kéo điểm để chỉnh, chạm vào một điểm để chọn rồi xóa.</p>')+
     '<div class="row"><button class="btn sm" data-act="draw-undo"'+(D.pts.length?'':' disabled')+'>Hoàn tác</button>'+(S.drawSel!=null?'<button class="btn sm danger" data-act="draw-delpt">Xóa điểm '+(S.drawSel+1)+'</button>':'')+
-    armBtn('draw-cancel','Hủy','draw-cancel')+'<button class="btn sm pri" data-act="draw-save"'+(D.pts.length>=3?'':' disabled')+'>Lưu vùng</button></div></div>';
+    armBtn('draw-cancel','Hủy','draw-cancel')+'<button class="btn sm pri" data-act="draw-save"'+(D.pts.length>=3?'':' disabled')+'>'+(D.newLot?(D.info.pick?'Gắn ranh vào lô':'Lưu lô mới'):'Lưu vùng')+'</button></div></div>';
 }
 function stopTrack(){if(trackWatch!==null){try{navigator.geolocation.clearWatch(trackWatch);}catch(e){}trackWatch=null;trackAcc=null;}}
 function drawTrack(){
@@ -1606,8 +1647,20 @@ function drawGps(){
   setTimeout(done,8000);
 }
 function drawSave(){
-  var D=S.draw;if(!D||D.pts.length<3)return;var L0=coll('lots'),l=L0[D.lotId];if(!l){toast('Không tìm thấy lô');return;}
+  var D=S.draw;if(!D||D.pts.length<3)return;var L0=coll('lots');
   var ne=$('#draw_note');if(ne)D.ghiChu=ne.value.trim();
+  if(D.newLot){var I=D.info||{},ma=String(I.maLo||'').trim();
+    var same=I.pick&&L0[I.pick]?I.pick:Object.keys(L0).filter(function(k){return String(L0[k].maLo||'').trim().toLowerCase()===ma.toLowerCase()&&ma;})[0];
+    if(same){var lx=L0[same],rx={id:uid(),ht:D.ht,ghiChu:D.ghiChu||'',pts:D.pts.slice(),ngay:today(),updatedAt:Date.now()};
+      put('lots/'+same,Object.assign({},lx,{vung:lotVung(lx).concat([rx]),updatedAt:Date.now()}));
+      stopTrack();S.draw=null;saveDraw();S.mapLot=same;S.vungSel=null;render();
+      toast('Đã gắn ranh '+fmt(polyArea(rx.pts)/10000,2)+' ha vào lô '+lx.maLo);return;}
+    if(!ma){toast('Chọn lô có sẵn hoặc nhập mã lô mới trước khi lưu');var mi=$('#draw_maLo');if(mi)mi.focus();return;}
+    var nid=uid(),rec0={id:uid(),ht:D.ht,ghiChu:D.ghiChu||'',pts:D.pts.slice(),ngay:today(),updatedAt:Date.now()};
+    put('lots/'+nid,{maLo:ma,chuRung:I.chuRung||'',xa:I.xa||'',tieuKhu:'',khoanh:'',loai:I.loai||'Keo lai',namTrong:I.namTrong||'',dienTich:null,ghiChu:'',vung:[rec0],updatedAt:Date.now()});
+    stopTrack();S.draw=null;saveDraw();S.mapLot=nid;S.vungSel=null;render();
+    toast('Đã tạo lô '+ma+' – '+fmt(polyArea(rec0.pts)/10000,2)+' ha');return;}
+  var l=L0[D.lotId];if(!l){toast('Không tìm thấy lô');return;}
   var vung=lotVung(l).slice(),rec={id:D.vid||uid(),ht:D.ht,ghiChu:D.ghiChu||'',pts:D.pts.slice(),ngay:today(),updatedAt:Date.now()};
   if(D.vid)vung=vung.map(function(v){return v.id===D.vid?rec:v;});else vung.push(rec);
   put('lots/'+D.lotId,Object.assign({},l,{vung:vung,updatedAt:Date.now()}));
@@ -1813,10 +1866,12 @@ function mapInfoHtml(){
   var L=coll('lots')[sel.lotId],s=plotStats(sel,fOf(L));
   return '<div class="panel"><div class="row between"><h2>Lô '+esc(L.maLo)+' · Ô '+esc(sel.so)+'</h2><button class="btn sm" data-act="plot-open" data-id="'+esc(sel.id)+'">Mở ô</button></div>'+
     '<p class="mono">'+sel.lat.toFixed(6)+', '+sel.lng.toFixed(6)+'</p><p class="muted">'+s.n+' cây · '+fmt(s.Mha,1)+' m³/ha · '+esc(vnDate(sel.ngay))+'</p>'+
-    '<div class="row"><a class="btn sm" href="'+satUrl(sel.lat,sel.lng)+'" target="_blank" rel="noopener">Xem vệ tinh trên Google Maps</a><a class="btn sm ghost" href="https://www.google.com/maps/dir/?api=1&destination='+sel.lat+','+sel.lng+'" target="_blank" rel="noopener">Chỉ đường</a></div></div>';
+    '<div class="row">'+(S.mapLot!==sel.lotId?'<button class="btn sm pri" data-act="map-pick" data-id="'+esc(sel.lotId)+'">Chọn lô này</button>':'')+'<a class="btn sm" href="'+satUrl(sel.lat,sel.lng)+'" target="_blank" rel="noopener">Xem vệ tinh trên Google Maps</a><a class="btn sm ghost" href="https://www.google.com/maps/dir/?api=1&destination='+sel.lat+','+sel.lng+'" target="_blank" rel="noopener">Chỉ đường</a></div></div>';
 }
 function viewMap(){
-  if(S.draw&&useLeaflet())S.mapLot=S.draw.lotId;
+  if(S.draw&&!S.draw.newLot&&!coll('lots')[S.draw.lotId]){S.draw=null;saveDraw();}
+  if(S.draw&&!S.draw.newLot&&S.mapLot!==S.draw.lotId){if(!S.draw.pts.length){S.draw=null;saveDraw();}else S.mapLot=S.draw.lotId;}
+  if(S.mapLot!=='all'&&!coll('lots')[S.mapLot])S.mapLot='all';
   var M=mapPoints(),lots=M.lots,pts=M.pts,h='';
   h+='<div class="row between"><h1>Bản đồ vị trí ô</h1><select id="mapLot" style="width:auto;max-width:100%"><option value="all">Tất cả lô</option>'+lots.map(function(l){return '<option value="'+esc(l.id)+'"'+(S.mapLot===l.id?' selected':'')+'>Lô '+esc(l.maLo)+'</option>';}).join('')+'</select></div>';
   if(useLeaflet()){
@@ -1897,7 +1952,9 @@ function mapSvg(pts,color,polys){
   var bw=bar/mpp;
   g+='<g transform="translate('+(W-bw-16)+','+(18)+')"><rect x="-6" y="-12" width="'+(bw+12)+'" height="26" rx="4" fill="var(--surface)" opacity=".9"/><line x1="0" y1="8" x2="'+bw.toFixed(1)+'" y2="8" stroke="var(--ink)" stroke-width="2"/><line x1="0" y1="3" x2="0" y2="8" stroke="var(--ink)" stroke-width="2"/><line x1="'+bw.toFixed(1)+'" y1="3" x2="'+bw.toFixed(1)+'" y2="8" stroke="var(--ink)" stroke-width="2"/><text x="'+(bw/2).toFixed(1)+'" y="0" text-anchor="middle" font-size="11" fill="var(--ink)" font-family="var(--f-num)">'+(bar>=1000?bar/1000+' km':bar+' m')+'</text></g>';
   g+='<g transform="translate(18,22)"><text x="0" y="0" font-size="12" font-weight="700" fill="var(--ink)" text-anchor="middle">B</text><path d="M0 4 L5 16 L0 13 L-5 16 Z" fill="var(--ink)"/></g>';
+  var lbls={};polys.forEach(function(q){if(!lbls[q.lotId]){var lo=coll('lots')[q.lotId],pp=lo&&lotLabelPos(lo);if(pp)lbls[q.lotId]={p:pp,t:'Lô '+lo.maLo};}});
   polys.forEach(function(q){g+='<polygon points="'+q.pts.map(function(v){return X(v[1]).toFixed(1)+','+Y(v[0]).toFixed(1);}).join(' ')+'" fill="'+q.c+'" fill-opacity=".35" stroke="'+q.c+'" stroke-width="2"/>';});
+  Object.keys(lbls).forEach(function(k){var b=lbls[k];g+='<text x="'+X(b.p[1]).toFixed(1)+'" y="'+Y(b.p[0]).toFixed(1)+'" text-anchor="middle" font-size="14" font-weight="700" fill="var(--ink)" stroke="var(--surface)" stroke-width="3" paint-order="stroke">'+esc(b.t)+'</text>';});
   pts.forEach(function(p){var x=X(p.lng),y=Y(p.lat),on=p.id===S.mapSel;
     g+='<g data-act="map-sel" data-id="'+esc(p.id)+'" style="cursor:pointer"><circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="14" fill="transparent"/><circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="'+(on?9:7)+'" fill="'+color[p.lotId]+'" stroke="var(--surface)" stroke-width="2"/><text x="'+(x+11).toFixed(1)+'" y="'+(y+4).toFixed(1)+'" font-size="11" font-weight="600" fill="var(--ink)">Ô '+esc(p.so)+'</text></g>';});
   return '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Sơ đồ vị trí các ô tiêu chuẩn"><rect width="'+W+'" height="'+H+'" fill="var(--sunk)"/>'+g+'</svg>';
@@ -2055,7 +2112,7 @@ document.addEventListener('click',function(e){
   var nav=e.target.closest('[data-nav]');if(nav){setView(nav.getAttribute('data-nav'));return;}
   var b=e.target.closest('[data-act]');if(!b)return;
   var act=b.getAttribute('data-act'),id=b.getAttribute('data-id'),prevArmed=S.armed;
-  if(act!=='tree-del'&&act!=='lot-del'&&act!=='plot-del'&&act!=='draft-drop'&&act!=='local-clear'&&act!=='draw-cancel'&&act!=='vung-del')S.armed=null;
+  if(act!=='tree-del'&&act!=='lot-del'&&act!=='plot-del'&&act!=='draft-drop'&&act!=='local-clear'&&act!=='draw-cancel'&&act!=='vung-del'&&act!=='map-lot-del'&&act!=='map-vung-del')S.armed=null;
   switch(act){
     case 'lot-new':S.lotForm={id:null};render();break;
     case 'go-lot-new':S.lotForm={id:null};setView('lo',true);break;
@@ -2095,9 +2152,28 @@ document.addEventListener('click',function(e){
       S.armed=null;var lid2=S.draft.lotId;del('plots/'+S.draft.plotId);S.draft=null;saveDraft();S.lotId=lid2;toast('Đã xóa ô');setView('lo');break;
     case 'map-sel':S.mapSel=id;render();break;
     case 'map-me':mapMe();break;
+    case 'draw-newlot':var pk=S.mapLot!=='all'&&coll('lots')[S.mapLot]&&!lotVung(coll('lots')[S.mapLot]).length?S.mapLot:'';S.mapEdit=null;S.vungSel=null;S.mapSel=null;S.draw={newLot:true,lotId:null,vid:null,pts:[],ht:'Rừng trồng',ghiChu:'',info:{pick:pk,maLo:'',chuRung:'',xa:'',loai:'Keo lai',namTrong:''}};S.drawSel=null;saveDraw();var mi9=$('#mapInfo');if(mi9)mi9.innerHTML='';drawRender();toast('Chạm lên bản đồ để chấm các góc lô');mapIntoView();break;
+    case 'map-lot-edit':S.mapEdit=S.mapLot;drawBar();break;
+    case 'map-lot-edit-cancel':S.mapEdit=null;drawBar();break;
+    case 'map-lot-edit-save':var le=coll('lots')[S.mapEdit];if(!le)break;var mv=function(i){var x=$('#'+i);return x?x.value.trim():'';};
+      if(!mv('me_maLo')){toast('Nhập mã lô');break;}
+      put('lots/'+S.mapEdit,Object.assign({},le,{maLo:mv('me_maLo'),chuRung:mv('me_chuRung'),xa:mv('me_xa'),tieuKhu:mv('me_tieuKhu'),khoanh:mv('me_khoanh'),loai:mv('me_loai'),namTrong:mv('me_namTrong'),ghiChu:mv('me_ghiChu'),updatedAt:Date.now()}));
+      S.mapEdit=null;toast('Đã lưu thông tin lô');render();break;
+    case 'map-lot-del':if(prevArmed!=='map-lot-del'){S.armed='map-lot-del';drawBar();break;}
+      S.armed=null;var dlid=S.mapLot,dlo=coll('lots')[dlid];if(!dlo)break;plotsOf(dlid).forEach(function(p){del('plots/'+p.id);});del('lots/'+dlid);
+      if(S.draft&&S.draft.lotId===dlid){S.draft=null;saveDraft();}if(S.lotId===dlid)S.lotId=null;
+      S.mapLot='all';S.vungSel=null;S.mapSel=null;toast('Đã xóa lô '+dlo.maLo);render();break;
+    case 'map-vung-edit':var lv2=coll('lots')[S.mapLot],vv2=lv2&&lotVung(lv2).filter(function(x){return x.id===id;})[0];
+      if(vv2){S.draw={lotId:S.mapLot,vid:vv2.id,pts:vv2.pts.slice(),ht:vv2.ht,ghiChu:vv2.ghiChu||''};S.drawSel=null;saveDraw();drawVung();drawRender();
+        if(lmap)try{lmap.fitBounds(vv2.pts,{padding:[30,30],maxZoom:19});}catch(e){}toast('Kéo các điểm tròn để chỉnh; chạm điểm nhỏ giữa cạnh để thêm góc');mapIntoView();}break;
+    case 'map-vung-del':var kk='mvd-'+id;if(prevArmed!==kk){S.armed=kk;drawBar();break;}
+      S.armed=null;var lv3=coll('lots')[S.mapLot];if(lv3){put('lots/'+S.mapLot,Object.assign({},lv3,{vung:lotVung(lv3).filter(function(x){return x.id!==id;}),updatedAt:Date.now()}));toast('Đã xóa vùng');}
+      drawVung();drawBar();break;
+    case 'map-pick':if(S.draw&&S.draw.pts.length){toast('Đang khoanh vẽ dở, bấm Lưu vùng hoặc Hủy trước');break;}if(S.draw){stopTrack();S.draw=null;saveDraw();}S.mapLot=id;S.mapSel=null;S.vungSel=null;render();break;
+    case 'lot-goto':S.lotId=id;S.lotForm=null;setView('lo');break;
     case 'map-fit':if(lmap&&S._mapPts&&S._mapPts.length){if(S._mapPts.length===1)lmap.setView(S._mapPts[0],17);else lmap.fitBounds(S._mapPts,{padding:[30,30],maxZoom:18});}break;
     case 'xlsx':exportXlsx();break;
-    case 'draw-start':S.draw={lotId:S.mapLot,vid:null,pts:[],ht:'Rừng trồng',ghiChu:''};S.vungSel=null;S.drawSel=null;saveDraw();var mi0=$('#mapInfo');if(mi0)mi0.innerHTML='';drawVung();drawRender();break;
+    case 'draw-start':S.draw={lotId:S.mapLot,vid:null,pts:[],ht:'Rừng trồng',ghiChu:''};S.vungSel=null;S.drawSel=null;saveDraw();var mi0=$('#mapInfo');if(mi0)mi0.innerHTML='';drawVung();drawRender();mapIntoView();break;
     case 'draw-gps':drawGps();break;
     case 'draw-track':drawTrack();break;
     case 'draw-undo':if(S.draw&&S.draw.pts.length){S.draw.pts.pop();S.drawSel=null;saveDraw();drawRender();}break;
@@ -2152,6 +2228,7 @@ document.addEventListener('input',function(e){
   if(id.indexOf('d_')===0)readDraftField(id,e.target.value);
   if(id.indexOf('bc_')===0&&id!=='bc_lot'&&id!=='bc_anh')bcSetField(id.slice(3),e.target.value);
   if(id==='draw_note'&&S.draw){S.draw.ghiChu=e.target.value;saveDraw();}
+  if(S.draw&&S.draw.newLot&&/^draw_(maLo|chuRung|xa|namTrong)$/.test(id)){S.draw.info[id.slice(5)]=e.target.value;saveDraw();}
   if(e.target.hasAttribute&&e.target.hasAttribute('data-ir')&&S.imp){var ri=+e.target.getAttribute('data-ir');if(S.imp.rows[ri])S.imp.rows[ri][e.target.getAttribute('data-k')]=e.target.value;}
   if(id==='tD'){var c=num(e.target.value),w=$('#tWarn');if(w)w.textContent=c>0?'C1.3 '+fmt(c,1)+' cm → D1.3 '+fmt(c/Math.PI,1)+' cm':'D1.3 = C1.3 / π, phần mềm tự quy đổi.';}
 });
@@ -2169,9 +2246,15 @@ document.addEventListener('change',function(e){
   if(t.id==='exp_from'||t.id==='exp_to'){expState()[t.id==='exp_from'?'from':'to']=t.value;saveExp();render();}
   if(t.id==='bc_lot'){S.bcLot=t.value;render();setTimeout(function(){var x=$('#bc_lot');if(x)x.scrollIntoView({block:'start'});},30);}
   if(t.id==='bc_anh')bcSetField('anh',t.checked);
+  if(t.id==='draw_pick'&&S.draw&&S.draw.newLot){S.draw.info.pick=t.value||'';saveDraw();drawBar();}
+  if(t.id==='draw_loai'&&S.draw&&S.draw.newLot){S.draw.info.loai=t.value;saveDraw();}
   if(t.id==='draw_ht'&&S.draw){S.draw.ht=t.value;saveDraw();drawRender();}
   if(t.name==='expMode'){expState().mode=t.value;saveExp();}
-  if(t.id==='mapLot'){S.mapLot=t.value;S.mapSel=null;render();}
+  if(t.id==='mapLot'){
+    if(S.draw&&S.draw.pts.length&&(S.draw.newLot||t.value!==S.draw.lotId)){var dl=coll('lots')[S.draw.lotId];t.value=S.mapLot;
+      toast('Đang khoanh vẽ dở '+(dl?'lô '+dl.maLo:'lô mới')+' ('+S.draw.pts.length+' điểm). Bấm Lưu vùng hoặc Hủy rồi mới chọn lô khác.');return;}
+    if(S.draw&&!S.draw.pts.length){stopTrack();S.draw=null;saveDraw();}
+    S.mapLot=t.value;S.mapSel=null;S.vungSel=null;S.armed=null;S.mapEdit=null;render();}
 });
 document.addEventListener('submit',function(e){
   if(e.target.id!=='lotForm')return;e.preventDefault();
