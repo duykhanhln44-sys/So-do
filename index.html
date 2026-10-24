@@ -838,7 +838,7 @@ nav.tabs button[aria-current="page"]{color:var(--accent);background:var(--accent
 
 <script src="xlsx.full.min.js"></script>
 <script src="leaflet.js"></script>
-<script>window.__SODO__=true;window.__SODO_VER__='20261024-1130';</script>
+<script>window.__SODO__=true;window.__SODO_VER__='20261024-1147';</script>
 <script>
 (function(){
 'use strict';
@@ -1041,7 +1041,7 @@ function lotFormHtml(){
 function fld(label,id,val,type,ph,im){return '<label class="fld"><span>'+label+'</span><input id="'+id+'" type="'+(type||'text')+'" value="'+esc(val==null?'':val)+'"'+(ph?' placeholder="'+esc(ph)+'"':'')+(im?' inputmode="'+im+'"':'')+'></label>';}
 function lotDetail(id,l){
   var c=cfg(),pl=coll('plots'),s=lotStats(id,l,pl,c),ps=plotsOf(id,pl),h='';
-  h+='<div class="row between"><button class="btn ghost sm" data-act="lot-back">← Danh sách lô</button><div class="row">'+((S.downloads||SODO)?'<button class="btn sm" data-act="lot-xlsx">Xuất Excel</button>':'')+'<button class="btn sm" data-act="lot-edit">Sửa lô</button>'+armBtn('lot-del','Xóa lô','lot-del')+'</div></div>';
+  h+='<div class="row between"><button class="btn ghost sm" data-act="lot-back">← Danh sách lô</button><div class="row">'+((S.downloads||SODO)?'<button class="btn sm" data-act="lot-xlsx">Xuất Excel</button>':'')+'<button class="btn sm" data-act="lot-bc">Biên bản</button><button class="btn sm" data-act="lot-edit">Sửa lô</button>'+armBtn('lot-del','Xóa lô','lot-del')+'</div></div>';
   h+='<div><p class="lbl">'+esc(l.loai||'Khác')+(l.namTrong?' · trồng '+esc(l.namTrong):'')+'</p><h1>Lô '+esc(l.maLo)+'</h1><p class="muted">'+esc([l.chuRung,l.xa,l.tieuKhu?'TK '+l.tieuKhu:'',l.khoanh?'K '+l.khoanh:'',areaTxt(l)].filter(Boolean).join(' · '))+'</p></div>';
   if(arm('lot-del')&&ps.length)h+='<div class="banner err">Xóa lô sẽ xóa luôn '+ps.length+' ô tiêu chuẩn đã đo.</div>';
   h+='<div class="stats">'+stat('Trữ lượng lô',fmt(s.total,1),'m³')+stat('M bình quân',fmt(s.Mha,1),'m³/ha')+stat('Sai số rút mẫu',Number.isFinite(s.err)?'±'+fmt(s.err,1):'–','%')+stat('Mật độ',fmt(s.Nha,0),'cây/ha')+stat('D1.3 bq',fmt(s.d,1),'cm')+stat('Hvn bq',fmt(s.h,1),'m')+'</div>';
@@ -1626,6 +1626,175 @@ function vungListHtml(id,l){
 }
 function useLeafletAvail(){return !!(window.L&&SODO);}
 
+/* ---------- Báo cáo kiểm tra lô rừng (Word) ---------- */
+var DOCX_SRC=window.__SODO__?'docx.umd.js':'https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js';
+function loadDocx(){
+  if(window.docx)return Promise.resolve(window.docx);
+  if(S._docxP)return S._docxP;
+  S._docxP=new Promise(function(res,rej){var sc=document.createElement('script');sc.src=DOCX_SRC;sc.onload=function(){window.docx?res(window.docx):rej(new Error('docx'));};sc.onerror=function(){S._docxP=null;rej(new Error('load'));};document.head.appendChild(sc);});
+  return S._docxP;
+}
+function bcDefaults(){return lsGet('dtr.bc.v1',null)||{donVi:'CÔNG TY CỔ PHẦN GỖ MDF VRG KIÊN GIANG',boPhan:'PHÒNG KẾ HOẠCH VẬT TƯ',tp:'',heSo:1};}
+function bcGet(lotId){
+  var D=bcDefaults(),l=coll('lots')[lotId]||{},saved=Object.assign({},l.baoCao||{},(lsGet('dtr.bcdraft.v1',{})||{})[lotId]||{});
+  return Object.assign({so:'',ngay:today(),diaDiem:l.xa?'xã '+l.xa:'',donVi:D.donVi,boPhan:D.boPhan,tp:D.tp,chuRungDD:l.chuRung||'',nx:'',kn:'',anh:true,heSo:D.heSo},saved);
+}
+function bcSetField(k,v){
+  var id=S.bcLot;if(!id)return;var all=lsGet('dtr.bcdraft.v1',{})||{};all[id]=Object.assign({},all[id]||{},(function(){var o={};o[k]=v;return o;})());lsSet('dtr.bcdraft.v1',all);
+  if(k==='donVi'||k==='boPhan'||k==='tp'||k==='heSo'){var D=bcDefaults();D[k]=v;lsSet('dtr.bc.v1',D);}
+}
+function lotAge(l){var y=parseInt(l.namTrong,10),now=new Date().getFullYear();return y>1900&&y<=now?now-y:null;}
+function qDist(lotId,pl){var o={A:0,B:0,C:0,khac:0,n:0};plotsOf(lotId,pl).forEach(function(p){(p.trees||[]).forEach(function(t){if(!(t.d>0))return;o.n++;if(t.q==='A'||t.q==='B'||t.q==='C')o[t.q]++;else o.khac++;});});return o;}
+function pct(a,n){return n?fmt(a/n*100,1)+'%':'–';}
+function bcAuto(lotId){
+  var l=coll('lots')[lotId];if(!l)return '';var s=lotStats(lotId,l),LA=lotArea(l),age=lotAge(l),Q=qDist(lotId),hs=num(bcGet(lotId).heSo)||1,parts=[];
+  parts.push('Lô '+l.maLo+(l.chuRung?' của '+l.chuRung:'')+', trồng '+(l.loai||'')+(l.namTrong?' năm '+l.namTrong+(age!==null?' ('+age+' tuổi)':''):'')+', diện tích '+(Number.isFinite(LA.ha)?fmt(LA.ha,2)+' ha':'chưa xác định')+(LA.src==='khoanh'?' theo khoanh vẽ trên bản đồ':LA.src==='nhap'?' theo số liệu cung cấp':'')+'.');
+  var V=lotVung(l);if(V.length){var by={};V.forEach(function(v){by[v.ht]=(by[v.ht]||0)+polyArea(v.pts)/10000;});parts.push('Hiện trạng: '+Object.keys(by).map(function(k){return k.toLowerCase()+' '+fmt(by[k],2)+' ha';}).join(', ')+'.');}
+  if(s.plots){parts.push('Đã điều tra '+s.plots+' ô tiêu chuẩn; mật độ bình quân '+fmt(s.Nha,0)+' cây/ha, D1.3 bình quân '+fmt(s.d,1)+' cm, Hvn bình quân '+fmt(s.h,1)+' m, trữ lượng bình quân '+fmt(s.Mha,1)+' m³/ha'+(Number.isFinite(s.err)?' (sai số rút mẫu ±'+fmt(s.err,1)+'%)':'')+'.');
+    if(Number.isFinite(s.total))parts.push('Tổng trữ lượng ước tính của lô '+fmt(s.total,1)+' m³, tương đương khoảng '+fmt(s.total*hs,1)+' tấn.');}
+  else parts.push('Lô chưa có số liệu ô tiêu chuẩn.');
+  if(Q.n&&(Q.A+Q.B+Q.C))parts.push('Phẩm chất cây: loại A '+pct(Q.A,Q.n)+', loại B '+pct(Q.B,Q.n)+', loại C '+pct(Q.C,Q.n)+(Q.khac?', chưa đánh giá '+pct(Q.khac,Q.n):'')+'.');
+  return parts.join(' ');
+}
+function bcPanel(lots){
+  if(!lots.length)return '';
+  if(!S.bcLot||!coll('lots')[S.bcLot])S.bcLot=(S.lotId&&coll('lots')[S.lotId])?S.lotId:lots[0].id;
+  var B=bcGet(S.bcLot),h='<section class="panel"><h2>Báo cáo kiểm tra lô rừng</h2><p class="muted">Xuất biên bản Word đầy đủ thông tin lô: vị trí, diện tích, hiện trạng, tọa độ ranh VN-2000, sơ đồ, kết quả OTC, trữ lượng, phẩm chất, ảnh hiện trường, nhận xét và chữ ký.</p>';
+  h+='<div class="fields"><label class="fld"><span>Lô rừng</span><select id="bc_lot">'+lots.map(function(l){return '<option value="'+esc(l.id)+'"'+(l.id===S.bcLot?' selected':'')+'>Lô '+esc(l.maLo)+(l.chuRung?' – '+esc(l.chuRung):'')+'</option>';}).join('')+'</select></label>'+
+    fld('Số biên bản','bc_so',B.so,'text','VD: 15/BB-KHVT')+'<label class="fld"><span>Ngày kiểm tra</span><input type="date" id="bc_ngay" value="'+esc(B.ngay)+'"></label>'+fld('Địa điểm','bc_diaDiem',B.diaDiem,'text','VD: xã Khánh Thuận, huyện U Minh')+'</div>';
+  h+='<div class="fields">'+fld('Đơn vị','bc_donVi',B.donVi)+fld('Bộ phận','bc_boPhan',B.boPhan)+fld('Đại diện chủ rừng','bc_chuRungDD',B.chuRungDD)+fld('Hệ số quy đổi (tấn/m³)','bc_heSo',B.heSo,'text','1','decimal')+'</div>';
+  h+='<label class="fld"><span>Thành phần kiểm tra – mỗi dòng một người: Họ tên – Chức vụ</span><textarea id="bc_tp" placeholder="Trần Duy Khánh – Cán bộ kỹ thuật">'+esc(B.tp)+'</textarea></label>';
+  h+='<label class="fld"><span>Nhận xét, kết luận</span><textarea id="bc_nx" style="min-height:120px" placeholder="Để trống sẽ tự viết nhận xét từ số liệu">'+esc(B.nx)+'</textarea></label>';
+  h+='<div class="row"><button class="btn sm" data-act="bc-auto">Viết nhận xét tự động từ số liệu</button></div>';
+  h+='<label class="fld"><span>Kiến nghị</span><textarea id="bc_kn" placeholder="VD: Đủ điều kiện khai thác, đề nghị lập hồ sơ thu mua">'+esc(B.kn)+'</textarea></label>';
+  h+='<label class="row" style="gap:8px"><input type="checkbox" id="bc_anh"'+(B.anh!==false?' checked':'')+' style="width:20px;min-height:20px">Kèm ảnh hiện trường (tối đa 6 ảnh)</label>';
+  h+='<div class="row"><button class="btn pri" data-act="bc-make">Xuất báo cáo Word</button></div></section>';
+  return h;
+}
+async function refBlob(r){
+  try{if(String(r).indexOf('local:')===0){var k=r.slice(6);return MEM[k]||await idbGet(k);}var res=await fetch('/_blob/'+r);return res.ok?await res.blob():null;}catch(e){return null;}
+}
+function imgSize(blob){return new Promise(function(res){var u=URL.createObjectURL(blob),i=new Image();i.onload=function(){res([i.naturalWidth,i.naturalHeight]);URL.revokeObjectURL(u);};i.onerror=function(){res([4,3]);URL.revokeObjectURL(u);};i.src=u;});}
+function sketchPng(l,ps,kt){
+  var W=1400,H=900,pad=90,cv=document.createElement('canvas');cv.width=W;cv.height=H;var g=cv.getContext('2d');
+  g.fillStyle='#ffffff';g.fillRect(0,0,W,H);
+  var V=lotVung(l).filter(function(v){return v.pts&&v.pts.length>=3;}).map(function(v){return {ht:v.ht,P:v.pts.map(function(q){return wgs84ToVn2000(q[0],q[1],kt);})};});
+  var O=ps.map(function(p){if(Number.isFinite(p.vnX)&&Number.isFinite(p.vnY)&&looksVN2000(p.vnX,p.vnY))return {so:p.so,P:[p.vnX,p.vnY]};if(Number.isFinite(p.lat)&&Number.isFinite(p.lng))return {so:p.so,P:wgs84ToVn2000(p.lat,p.lng,kt)};return null;}).filter(Boolean);
+  var all=[];V.forEach(function(v){all=all.concat(v.P);});O.forEach(function(o){all.push(o.P);});
+  if(!all.length)return null;
+  var xs=all.map(function(p){return p[0];}),ys=all.map(function(p){return p[1];});
+  var x0=Math.min.apply(null,xs),x1=Math.max.apply(null,xs),y0=Math.min.apply(null,ys),y1=Math.max.apply(null,ys);
+  var spanY=Math.max(y1-y0,60),spanX=Math.max(x1-x0,60),sc=Math.min((W-2*pad)/spanY,(H-2*pad)/spanX),cy=(y0+y1)/2,cx=(x0+x1)/2;
+  function PX(p){return [W/2+(p[1]-cy)*sc,H/2-(p[0]-cx)*sc];}
+  var step=[10,20,50,100,200,500,1000,2000][0];[10,20,50,100,200,500,1000,2000].forEach(function(s0){if(Math.max(spanX,spanY)/s0>=3)step=s0;});
+  g.strokeStyle='#e3e3e3';g.lineWidth=1;g.fillStyle='#888';g.font='18px Arial';
+  for(var yv=Math.ceil((cy-(W/2)/sc)/step)*step;yv<=cy+(W/2)/sc;yv+=step){var px=PX([cx,yv])[0];g.beginPath();g.moveTo(px,0);g.lineTo(px,H);g.stroke();g.fillText('Y '+Math.round(yv),px+4,H-10);}
+  for(var xv=Math.ceil((cx-(H/2)/sc)/step)*step;xv<=cx+(H/2)/sc;xv+=step){var py=PX([xv,cy])[1];g.beginPath();g.moveTo(0,py);g.lineTo(W,py);g.stroke();g.fillText('X '+Math.round(xv),6,py-4);}
+  V.forEach(function(v){var c=htColor(v.ht);g.beginPath();v.P.forEach(function(p,i){var q=PX(p);i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1]);});g.closePath();g.globalAlpha=.28;g.fillStyle=c;g.fill();g.globalAlpha=1;g.lineWidth=4;g.strokeStyle=c;g.stroke();
+    g.fillStyle='#222';g.font='bold 20px Arial';v.P.forEach(function(p,i){var q=PX(p);g.beginPath();g.arc(q[0],q[1],6,0,7);g.fill();g.fillText(String(i+1),q[0]+9,q[1]-9);});});
+  O.forEach(function(o){var q=PX(o.P);g.beginPath();g.arc(q[0],q[1],11,0,7);g.fillStyle='#D13B5C';g.fill();g.lineWidth=3;g.strokeStyle='#fff';g.stroke();g.fillStyle='#000';g.font='bold 22px Arial';g.fillText('OTC '+o.so,q[0]+14,q[1]+7);});
+  g.fillStyle='#000';g.font='bold 26px Arial';g.textAlign='center';g.fillText('B',W-60,48);g.beginPath();g.moveTo(W-60,56);g.lineTo(W-72,92);g.lineTo(W-60,84);g.lineTo(W-48,92);g.closePath();g.fill();g.textAlign='left';
+  var bar=step,bw=bar*sc;while(bw>320){bar/=2;bw=bar*sc;}g.fillStyle='#fff';g.fillRect(W-bw-60,H-62,bw+40,44);g.strokeStyle='#000';g.lineWidth=3;g.beginPath();g.moveTo(W-bw-40,H-30);g.lineTo(W-40,H-30);g.moveTo(W-bw-40,H-38);g.lineTo(W-bw-40,H-22);g.moveTo(W-40,H-38);g.lineTo(W-40,H-22);g.stroke();
+  g.fillStyle='#000';g.font='18px Arial';g.textAlign='center';g.fillText(bar+' m',W-40-bw/2,H-40);g.textAlign='left';
+  var lx=20,ly=24;g.font='18px Arial';var seen={};V.forEach(function(v){if(seen[v.ht])return;seen[v.ht]=1;g.fillStyle=htColor(v.ht);g.fillRect(lx,ly,22,16);g.fillStyle='#000';g.fillText(v.ht,lx+30,ly+14);ly+=26;});
+  if(O.length){g.fillStyle='#D13B5C';g.beginPath();g.arc(lx+11,ly+8,8,0,7);g.fill();g.fillStyle='#000';g.fillText('Ô tiêu chuẩn',lx+30,ly+14);}
+  return new Promise(function(res){cv.toBlob(function(b){b?b.arrayBuffer().then(function(ab){res({data:ab,w:W,h:H});}):res(null);},'image/png');});
+}
+async function makeReport(){
+  var lotId=S.bcLot,l=coll('lots')[lotId];if(!l){toast('Chọn lô cần lập báo cáo');return;}
+  var B=bcGet(lotId);if(!String(B.nx||'').trim())B.nx=bcAuto(lotId);
+  toast('Đang lập báo cáo…');
+  var D;try{D=await loadDocx();}catch(e){toast('Chưa tải được bộ tạo file Word, kiểm tra mạng');return;}
+  var c=cfg(),kt=c.ktt,pl=coll('plots'),ps=plotsOf(lotId,pl),s=lotStats(lotId,l,pl,c),LA=lotArea(l),Q=qDist(lotId,pl),hs=num(B.heSo)||1,age=lotAge(l);
+  var P=D.Paragraph,T=D.TextRun,AL=D.AlignmentType,BS=D.BorderStyle,WT=D.WidthType;
+  function t(x,o){return new T(Object.assign({text:String(x==null?'':x)},o||{}));}
+  function para(x,o){o=o||{};return new P({alignment:o.align,spacing:{before:o.before||0,after:o.after==null?80:o.after,line:o.line||300},indent:o.indent,children:Array.isArray(x)?x:[t(x,{bold:o.bold,italics:o.italics,size:o.size})]});}
+  function h1(x){return para(x,{bold:true,before:200,after:100});}
+  var NB={style:BS.NONE,size:0,color:'FFFFFF'},noB={top:NB,bottom:NB,left:NB,right:NB,insideHorizontal:NB,insideVertical:NB};
+  var CW=9071;
+  function cell(x,o){o=o||{};return new D.TableCell({width:o.w?{size:Math.round(o.w/100*CW),type:WT.DXA}:undefined,columnSpan:o.span,shading:o.head?{fill:'E8EFEA',type:D.ShadingType.CLEAR,color:'auto'}:undefined,margins:{top:40,bottom:40,left:80,right:80},verticalAlign:D.VerticalAlign.CENTER,
+    children:(Array.isArray(x)?x:[x]).map(function(v){return v instanceof P?v:new P({alignment:o.align||(typeof v==='number'?AL.RIGHT:AL.LEFT),children:[t(typeof v==='number'?fmtN(v,o.dec):v,{bold:o.head||o.bold,size:o.size||24})]});})});}
+  function fmtN(v,d){return Number.isFinite(v)?v.toLocaleString('vi-VN',{minimumFractionDigits:d==null?0:d,maximumFractionDigits:d==null?2:d}):'–';}
+  function table(head,rows,o){o=o||{};var dec=o.dec||[];
+    var hr=new D.TableRow({tableHeader:true,children:head.map(function(h,i){return cell(h,{head:true,align:AL.CENTER,w:o.w&&o.w[i],size:o.size||22});})});
+    return new D.Table({width:{size:CW,type:WT.DXA},columnWidths:o.w?o.w.map(function(x){return Math.round(x/100*CW);}):undefined,layout:o.w?D.TableLayoutType.FIXED:undefined,rows:[hr].concat(rows.map(function(r){return new D.TableRow({children:r.map(function(v,i){return cell(v,{dec:dec[i],w:o.w&&o.w[i],size:o.size||22,align:o.align&&o.align[i],bold:o.boldRow&&o.boldRow(r)});})});}))});}
+  function kv(rows){return new D.Table({width:{size:CW,type:WT.DXA},columnWidths:[Math.round(.36*CW),Math.round(.64*CW)],layout:D.TableLayoutType.FIXED,rows:rows.map(function(r){return new D.TableRow({children:[cell(r[0],{w:36,bold:true}),cell(r[1],{w:64})]});})});}
+  var dd=String(B.ngay||today()).split('-'),ngayTxt='ngày '+(dd[2]||'…')+' tháng '+(dd[1]||'…')+' năm '+(dd[0]||'…');
+  var kids=[];
+  kids.push(new D.Table({width:{size:100,type:WT.PERCENTAGE},borders:noB,rows:[new D.TableRow({children:[
+    new D.TableCell({width:{size:42,type:WT.PERCENTAGE},borders:noB,children:[para(B.donVi||'',{align:AL.CENTER,after:0,size:24}),para(B.boPhan||'',{align:AL.CENTER,bold:true,after:0,size:24}),para('———',{align:AL.CENTER,after:40,size:20}),para('Số: '+(B.so||'……/BB'),{align:AL.CENTER,size:24})]}),
+    new D.TableCell({width:{size:58,type:WT.PERCENTAGE},borders:noB,children:[para('CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM',{align:AL.CENTER,bold:true,after:0,size:24}),para('Độc lập – Tự do – Hạnh phúc',{align:AL.CENTER,bold:true,after:0,size:26}),para('———————————',{align:AL.CENTER,after:40,size:20}),
+      para((B.diaDiem?B.diaDiem.replace(/^(xã|phường|thị trấn)\s+/i,'')+', ':'')+ngayTxt,{align:AL.CENTER,italics:true,size:26})]})]})]}));
+  kids.push(para('BIÊN BẢN KIỂM TRA HIỆN TRẠNG LÔ RỪNG',{align:AL.CENTER,bold:true,size:30,before:300,after:40}));
+  kids.push(para('Lô '+l.maLo+(l.chuRung?' – Chủ rừng: '+l.chuRung:''),{align:AL.CENTER,bold:true,size:26,after:200}));
+  kids.push(para('Hôm nay, '+ngayTxt+', tại '+(B.diaDiem||'hiện trường lô rừng')+', chúng tôi gồm:',{after:60}));
+  var tp=String(B.tp||'').split(/\n+/).map(function(x){return x.trim();}).filter(Boolean);
+  if(!tp.length)tp=['……………………………………… – ………………………',''];
+  kids.push(para('1. Đại diện '+(B.donVi?B.donVi.replace(/^CÔNG TY/,'Công ty'):'đơn vị kiểm tra')+':',{bold:true,after:40}));
+  tp.forEach(function(x){if(x)kids.push(para('– Ông/Bà: '+x,{indent:{left:400},after:20}));});
+  kids.push(para('2. Đại diện chủ rừng:',{bold:true,before:60,after:40}));
+  kids.push(para('– Ông/Bà: '+(B.chuRungDD||'………………………………………'),{indent:{left:400}}));
+  kids.push(para('Cùng tiến hành kiểm tra hiện trạng lô rừng, kết quả như sau:',{before:80}));
+  /* I */
+  var cent=null,Vv=lotVung(l).filter(function(v){return v.pts&&v.pts.length>=3;});
+  if(Vv.length){var allp=[];Vv.forEach(function(v){allp=allp.concat(v.pts);});var cl=avg(allp.map(function(q){return q[0];})),cg=avg(allp.map(function(q){return q[1];}));cent=wgs84ToVn2000(cl,cg,kt);}
+  else{var op=ps.filter(function(p){return Number.isFinite(p.lat);});if(op.length)cent=wgs84ToVn2000(avg(op.map(function(p){return p.lat;})),avg(op.map(function(p){return p.lng;})),kt);}
+  kids.push(h1('I. THÔNG TIN LÔ RỪNG'));
+  kids.push(kv([['Mã lô',l.maLo||''],['Chủ rừng',l.chuRung||''],['Địa điểm','Xã '+(l.xa||'……')+(l.tieuKhu?', tiểu khu '+l.tieuKhu:'')+(l.khoanh?', khoảnh '+l.khoanh:'')],['Loài cây trồng',l.loai||''],
+    ['Năm trồng / tuổi rừng',(l.namTrong||'……')+(age!==null?' / '+age+' tuổi':'')],['Diện tích lô',Number.isFinite(LA.ha)?fmt(LA.ha,4)+' ha ('+(LA.src==='khoanh'?'đo khoanh vẽ trên bản đồ, mặt phẳng VN-2000':'theo số liệu cung cấp')+')':'Chưa xác định'],
+    ['Tọa độ tâm lô (VN-2000, KTT '+kttTxt(kt)+')',cent?'X = '+fmtN(cent[0],2)+' m; Y = '+fmtN(cent[1],2)+' m':'Chưa có tọa độ'],['Ghi chú',l.ghiChu||'']]));
+  /* II */
+  kids.push(h1('II. HIỆN TRẠNG VÀ RANH GIỚI LÔ'));
+  if(Vv.length){
+    kids.push(table(['STT','Hiện trạng','Số điểm','Diện tích (ha)','Chu vi (m)','Ghi chú'],Vv.map(function(v,i){return [i+1,v.ht,v.pts.length,polyArea(v.pts)/10000,polyPerim(v.pts),v.ghiChu||''];}).concat([['','Cộng','',Vv.reduce(function(a,v){return a+polyArea(v.pts)/10000;},0),'','']]),{dec:[0,0,0,4,1,0],w:[8,24,12,18,16,22],align:[AL.CENTER],boldRow:function(r){return r[1]==='Cộng';}}));
+  }else kids.push(para('Lô chưa được khoanh vẽ ranh giới trên bản đồ.',{italics:true}));
+  var sk=await sketchPng(l,ps,kt);
+  if(sk){kids.push(para('Sơ đồ vị trí lô và ô tiêu chuẩn (hệ VN-2000):',{italics:true,before:120,after:40}));
+    kids.push(new P({alignment:AL.CENTER,children:[new D.ImageRun({data:sk.data,transformation:{width:560,height:Math.round(560*sk.h/sk.w)}})]}));}
+  Vv.forEach(function(v,vi){var Pp=vnPts(v.pts),n=Pp.length;
+    kids.push(para('Bảng tọa độ góc ranh – vùng '+(vi+1)+' ('+v.ht+', '+fmt(polyArea(v.pts)/10000,4)+' ha):',{italics:true,before:120,after:40}));
+    kids.push(table(['Điểm','X (m)','Y (m)','Cạnh','Chiều dài (m)'],Pp.map(function(q,i){var nx=Pp[(i+1)%n];return [i+1,q[0],q[1],(i+1)+'-'+((i+1)%n+1),Math.hypot(nx[0]-q[0],nx[1]-q[1])];}),{dec:[0,2,2,0,2],w:[12,26,26,14,22],align:[AL.CENTER,null,null,AL.CENTER]}));});
+  /* III */
+  kids.push(h1('III. KẾT QUẢ ĐIỀU TRA Ô TIÊU CHUẨN'));
+  if(ps.length){
+    kids.push(table(['OTC','Ngày đo','X (m)','Y (m)','DT ô (m²)','Số cây','D1.3 (cm)','Hvn (m)','M (m³/ha)','Phẩm chất A/B/C'],ps.map(function(p){var st=plotStats(p,s.f),q={A:0,B:0,C:0};(p.trees||[]).forEach(function(x){if(q[x.q]!=null)q[x.q]++;});
+      var X='',Y='';if(Number.isFinite(p.vnX)&&looksVN2000(p.vnX,p.vnY)){X=p.vnX;Y=p.vnY;}else if(Number.isFinite(p.lat)){var v2=wgs84ToVn2000(p.lat,p.lng,kt);X=v2[0];Y=v2[1];}
+      return [p.so,vnDate(p.ngay),X,Y,p.dienTich||'',st.n,st.d,st.h,st.Mha,q.A+'/'+q.B+'/'+q.C];}),{size:19,dec:[0,0,2,2,0,0,1,1,1,0],w:[7,11,16,15,7,7,8,8,9,12],align:[AL.CENTER,AL.CENTER,null,null,null,null,null,null,null,AL.CENTER]}));
+    if(s.est)kids.push(para('Ghi chú: '+s.est+' cây không đo Hvn được tính theo Hvn bình quân của ô.',{italics:true,size:22,before:60}));
+  }else kids.push(para('Chưa có số liệu ô tiêu chuẩn.',{italics:true}));
+  /* IV */
+  kids.push(h1('IV. TỔNG HỢP TRỮ LƯỢNG VÀ PHẨM CHẤT'));
+  kids.push(kv([['Số ô tiêu chuẩn',String(s.plots)],['Mật độ bình quân',fmt(s.Nha,0)+' cây/ha'],['D1.3 bình quân',fmt(s.d,1)+' cm'],['Hvn bình quân',fmt(s.h,1)+' m'],
+    ['Trữ lượng bình quân (M)',fmt(s.Mha,2)+' m³/ha'+(Number.isFinite(s.err)?' – sai số rút mẫu ±'+fmt(s.err,1)+'% (P = 95%)':'')],['Diện tích tính trữ lượng',Number.isFinite(LA.ha)?fmt(LA.ha,4)+' ha':'Chưa xác định'],
+    ['Tổng trữ lượng lô',Number.isFinite(s.total)?fmt(s.total,2)+' m³':'–'],['Khối lượng quy đổi',Number.isFinite(s.total)?fmt(s.total*hs,2)+' tấn (hệ số '+fmt(hs,2)+' tấn/m³)':'–'],
+    ['Phẩm chất cây',Q.n?'A: '+Q.A+' cây ('+pct(Q.A,Q.n)+'); B: '+Q.B+' cây ('+pct(Q.B,Q.n)+'); C: '+Q.C+' cây ('+pct(Q.C,Q.n)+')'+(Q.khac?'; chưa đánh giá: '+Q.khac+' cây':''):'–'],
+    ['Phương pháp tính','V cây = π/4 × (D1.3)² × Hvn × f; hình số f = '+fmt(s.f,2)+'; D1.3 = C1.3/π']]));
+  /* V, VI */
+  kids.push(h1('V. NHẬN XÉT, KẾT LUẬN'));
+  String(B.nx||'').split(/\n+/).filter(function(x){return x.trim();}).forEach(function(x){kids.push(para(x,{align:AL.JUSTIFIED,indent:{firstLine:400}}));});
+  kids.push(h1('VI. KIẾN NGHỊ'));
+  var knl=String(B.kn||'').split(/\n+/).filter(function(x){return x.trim();});if(!knl.length)knl=['…………………………………………………………………………………………………'];
+  knl.forEach(function(x){kids.push(para(x,{align:AL.JUSTIFIED,indent:{firstLine:400}}));});
+  /* VII ảnh */
+  if(B.anh!==false){var refs=[];ps.forEach(function(p){(p.photos||[]).forEach(function(r){refs.push({r:r,cap:'OTC '+p.so});});});refs=refs.slice(0,6);
+    var imgs=[];for(var i=0;i<refs.length;i++){var bl=await refBlob(refs[i].r);if(!bl)continue;try{var sm=await shrink(bl,900),sz=await imgSize(sm);imgs.push({data:await sm.arrayBuffer(),w:sz[0],h:sz[1],cap:refs[i].cap});}catch(e){}}
+    if(imgs.length){kids.push(h1('VII. ẢNH HIỆN TRƯỜNG'));var rows=[];
+      for(var k=0;k<imgs.length;k+=2){rows.push(new D.TableRow({children:[0,1].map(function(j){var im=imgs[k+j];if(!im)return new D.TableCell({borders:noB,children:[new P({})]});var w=290,hh=Math.round(w*im.h/im.w);if(hh>230){hh=230;w=Math.round(230*im.w/im.h);}
+        return new D.TableCell({width:{size:50,type:WT.PERCENTAGE},borders:noB,children:[new P({alignment:AL.CENTER,children:[new D.ImageRun({data:im.data,transformation:{width:w,height:hh}})]}),para('Ảnh '+(k+j+1)+': '+im.cap,{align:AL.CENTER,italics:true,size:22,after:120})]});})}));}
+      kids.push(new D.Table({width:{size:100,type:WT.PERCENTAGE},borders:noB,rows:rows}));}}
+  kids.push(para('Biên bản được lập thành ……… bản có giá trị như nhau, các bên thống nhất thông qua và cùng ký tên dưới đây.',{before:200,align:AL.JUSTIFIED,italics:true}));
+  function sig(title,name){return new D.TableCell({width:{size:33,type:WT.PERCENTAGE},borders:noB,children:[para(title,{align:AL.CENTER,bold:true,after:0,size:24}),para('(Ký, ghi rõ họ tên)',{align:AL.CENTER,italics:true,size:22,after:1100}),para(name||'',{align:AL.CENTER,bold:true,size:24})]});}
+  var nk=(tp[0]||'').split(/\s+[–-]\s+/)[0];
+  kids.push(new D.Table({width:{size:100,type:WT.PERCENTAGE},borders:noB,rows:[new D.TableRow({children:[sig('ĐẠI DIỆN CHỦ RỪNG',B.chuRungDD),sig('NGƯỜI KIỂM TRA',nk&&nk.indexOf('…')<0?nk:''),sig('XÁC NHẬN CỦA ĐƠN VỊ','')]})]}));
+  var doc=new D.Document({creator:'Điều tra rừng thực địa',title:'Biên bản kiểm tra lô '+l.maLo,styles:{default:{document:{run:{font:'Times New Roman',size:26}}}},
+    sections:[{properties:{page:{size:{width:11906,height:16838},margin:{top:1134,bottom:1134,left:1701,right:1134}}},
+      footers:{default:new D.Footer({children:[new P({alignment:AL.CENTER,children:[t('Lô '+l.maLo+' – trang ',{size:18,color:'888888'}),new T({children:[D.PageNumber.CURRENT],size:18,color:'888888'})]})]})},children:kids}]});
+  var blob=await D.Packer.toBlob(doc);
+  var all=lsGet('dtr.bcdraft.v1',{})||{};delete all[lotId];lsSet('dtr.bcdraft.v1',all);
+  var saveB=Object.assign({},B);put('lots/'+lotId,Object.assign({},l,{baoCao:saveB,updatedAt:Date.now()}));
+  saveFile('bien-ban-kiem-tra-lo-'+slug(l.maLo)+'-'+(B.ngay||today())+'.docx',blob,'Đã lưu biên bản kiểm tra lô '+l.maLo);
+}
+
 /* ---------- Màn hình: Bản đồ ---------- */
 var LOTHEX=['#0A6B58','#E07A1F','#3A5BA8','#B048B5','#8FA61A','#D13B5C'];
 var lmap=null,lmeLayer=null;
@@ -1751,6 +1920,7 @@ function viewSum(){
       '<div class="vnbox"><div><strong>Trích xuất tọa độ VN-2000</strong><p class="note">Tọa độ tâm các OTC và tọa độ góc ranh lô khoanh vẽ, X Y theo mét, KTT '+kttTxt(cfg().ktt)+', múi 3°. Kèm chiều dài cạnh, diện tích tính trên mặt phẳng VN-2000. Áp dụng theo lô và khoảng ngày đã chọn ở trên.</p></div><button class="btn pri" data-act="vn2000-xlsx"'+(EP.count?'':' disabled')+'>Xuất tọa độ VN-2000 (Excel)</button></div>';
     else h+='<p class="note">Chức năng lưu file chưa sẵn sàng ở chế độ xem này. Mở trang trong ứng dụng Claude khi đã đăng nhập.</p>';}
   h+='</section>';
+  h+=bcPanel(lots);
   h+='<section class="panel"><h2>Hệ tọa độ VN-2000</h2><p class="muted">Dùng khi đổi X, Y trên phiếu sang WGS84: múi chiếu 3°, k₀ = 0,9999, tích chuyển 7 tham số theo QĐ 05/2007/QĐ-BTNMT. Cà Mau, Kiên Giang dùng KTT 104°30′.</p><div class="fields">'+fld('Kinh tuyến trục','cfg_ktt',kttTxt(c.ktt),'text',"104°30'")+'</div><div class="row"><button class="btn" data-act="f-save">Lưu</button></div></section>';
   h+='<section class="panel"><h2>Hình số thân cây (f)</h2><p class="muted">V cây = π/4 × (D1.3/100)² × Hvn × f. Cây bỏ trống Hvn lấy Hvn bình quân của ô. Điều chỉnh f theo biểu thể tích đơn vị đang áp dụng.</p><div class="fields">'+
      Object.keys(c.f).map(function(k,i){return fld(esc(k),'f_'+i,c.f[k],'text','0,50','decimal').replace('<input','<input data-sp="'+esc(k)+'"');}).join('')+
@@ -1946,6 +2116,9 @@ document.addEventListener('click',function(e){
     case 'exp-none':expState().sel=[];saveExp();render();break;
     case 'geojson':exportGeo();break;
     case 'vn2000-xlsx':exportVN2000();break;
+    case 'bc-auto':var tx=bcAuto(S.bcLot),ta=$('#bc_nx');if(ta)ta.value=tx;bcSetField('nx',tx);break;
+    case 'bc-make':b.disabled=true;makeReport().catch(function(e){toast('Không lập được báo cáo: '+(e&&e.message||e));}).then(function(){b.disabled=false;});break;
+    case 'lot-bc':S.bcLot=S.lotId;setView('tonghop');setTimeout(function(){var x=$('#bc_lot');if(x)x.scrollIntoView({block:'start',behavior:'smooth'});},60);break;
     case 'f-save':
       var f={};document.querySelectorAll('[data-sp]').forEach(function(i){var v=num(i.value);if(v>0&&v<=1)f[i.getAttribute('data-sp')]=v;});
       var kEl=$('#cfg_ktt'),kv=kEl?parseKtt(kEl.value):NaN,cur=cfg();
@@ -1977,6 +2150,7 @@ document.addEventListener('keydown',function(e){
 document.addEventListener('input',function(e){
   var id=e.target.id||'';
   if(id.indexOf('d_')===0)readDraftField(id,e.target.value);
+  if(id.indexOf('bc_')===0&&id!=='bc_lot'&&id!=='bc_anh')bcSetField(id.slice(3),e.target.value);
   if(id==='draw_note'&&S.draw){S.draw.ghiChu=e.target.value;saveDraw();}
   if(e.target.hasAttribute&&e.target.hasAttribute('data-ir')&&S.imp){var ri=+e.target.getAttribute('data-ir');if(S.imp.rows[ri])S.imp.rows[ri][e.target.getAttribute('data-k')]=e.target.value;}
   if(id==='tD'){var c=num(e.target.value),w=$('#tWarn');if(w)w.textContent=c>0?'C1.3 '+fmt(c,1)+' cm → D1.3 '+fmt(c/Math.PI,1)+' cm':'D1.3 = C1.3 / π, phần mềm tự quy đổi.';}
@@ -1993,6 +2167,8 @@ document.addEventListener('change',function(e){
     if(t.checked){if(cur.indexOf(id2)<0)cur.push(id2);}else cur=cur.filter(function(x){return x!==id2;});
     E.sel=cur.length===all.length?null:cur;saveExp();render();}
   if(t.id==='exp_from'||t.id==='exp_to'){expState()[t.id==='exp_from'?'from':'to']=t.value;saveExp();render();}
+  if(t.id==='bc_lot'){S.bcLot=t.value;render();setTimeout(function(){var x=$('#bc_lot');if(x)x.scrollIntoView({block:'start'});},30);}
+  if(t.id==='bc_anh')bcSetField('anh',t.checked);
   if(t.id==='draw_ht'&&S.draw){S.draw.ht=t.value;saveDraw();drawRender();}
   if(t.name==='expMode'){expState().mode=t.value;saveExp();}
   if(t.id==='mapLot'){S.mapLot=t.value;S.mapSel=null;render();}
